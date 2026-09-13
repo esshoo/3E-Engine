@@ -1,0 +1,31 @@
+﻿{
+  "schemaVersion": 1,
+
+  "id": "__template__",
+  "displayName": "New Game",
+  "enabled": false,
+
+  "integration": {
+    "state": "template"
+  },
+
+  "ui": {
+    "renderer": "imgui",
+    "inherits": "config/ui/default",
+    "root": "ui",
+    "liveReload": true
+  },
+
+  "paths": {
+    "commands": "commands",
+    "schemas": "schemas",
+    "scripts": "scripts",
+    "pipelines": "pipelines"
+  },
+
+  "runtime": {
+    "host": "3E-Player",
+    "mode": "module",
+    "module": ""
+  }
+}

@@ -1,0 +1,11 @@
+﻿{
+  "schemaVersion": 1,
+  "extends": "config/ui/default/shortcuts.json",
+
+  "bindings": [
+    {
+      "keys": "Ctrl+F5",
+      "command": "jackie.play"
+    }
+  ]
+}

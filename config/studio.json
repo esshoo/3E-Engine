@@ -1,0 +1,21 @@
+﻿{
+  "schemaVersion": 1,
+  "id": "3e-studio",
+  "displayName": "3E Studio",
+
+  "gamesDirectory": "games",
+  "defaultGameTemplate": "games/_template",
+  "defaultUiDirectory": "config/ui/default",
+
+  "autoDiscoverGames": true,
+
+  "liveReload": {
+    "enabled": true,
+    "debounceMs": 150,
+    "watch": [
+      "config/**/*.json",
+      "games/**/*.json",
+      "games/**/*.lua"
+    ]
+  }
+}

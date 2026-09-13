@@ -1,0 +1,5 @@
+﻿{
+  "schemaVersion": 1,
+  "extends": "config/ui/default/toolbar.json",
+  "items": []
+}

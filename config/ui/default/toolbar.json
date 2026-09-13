@@ -1,0 +1,27 @@
+﻿{
+  "schemaVersion": 1,
+
+  "items": [
+    {
+      "type": "command",
+      "id": "play",
+      "label": "Play",
+      "command": "game.play"
+    },
+    {
+      "type": "command",
+      "id": "stop",
+      "label": "Stop",
+      "command": "game.stop"
+    },
+    {
+      "type": "separator"
+    },
+    {
+      "type": "command",
+      "id": "reload",
+      "label": "Reload",
+      "command": "studio.reload_definitions"
+    }
+  ]
+}

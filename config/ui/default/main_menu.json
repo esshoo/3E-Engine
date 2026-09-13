@@ -1,0 +1,116 @@
+﻿{
+  "schemaVersion": 1,
+  "renderer": "imgui",
+
+  "menus": [
+    {
+      "id": "file",
+      "label": "File",
+      "items": [
+        {
+          "type": "command",
+          "label": "Open Project",
+          "command": "project.open"
+        },
+        {
+          "type": "separator"
+        },
+        {
+          "type": "command",
+          "label": "Exit",
+          "command": "studio.exit"
+        }
+      ]
+    },
+
+    {
+      "id": "edit",
+      "label": "Edit",
+      "items": [
+        {
+          "type": "command",
+          "label": "Undo",
+          "command": "edit.undo"
+        },
+        {
+          "type": "command",
+          "label": "Redo",
+          "command": "edit.redo"
+        }
+      ]
+    },
+
+    {
+      "id": "view",
+      "label": "View",
+      "items": [
+        {
+          "type": "command",
+          "label": "Project Explorer",
+          "command": "panel.project.toggle"
+        },
+        {
+          "type": "command",
+          "label": "Outliner",
+          "command": "panel.outliner.toggle"
+        },
+        {
+          "type": "command",
+          "label": "Properties",
+          "command": "panel.properties.toggle"
+        },
+        {
+          "type": "command",
+          "label": "Console",
+          "command": "panel.console.toggle"
+        }
+      ]
+    },
+
+    {
+      "id": "game",
+      "label": "Game",
+      "items": [
+        {
+          "type": "command",
+          "label": "Play",
+          "command": "game.play"
+        },
+        {
+          "type": "command",
+          "label": "Stop",
+          "command": "game.stop"
+        }
+      ]
+    },
+
+    {
+      "id": "tools",
+      "label": "Tools",
+      "items": [
+        {
+          "type": "command",
+          "label": "Command Palette",
+          "command": "studio.command_palette"
+        },
+        {
+          "type": "command",
+          "label": "Reload Definitions",
+          "command": "studio.reload_definitions"
+        }
+      ]
+    },
+
+    {
+      "id": "help",
+      "label": "Help",
+      "items": [
+        {
+          "type": "command",
+          "label": "About 3E Studio",
+          "command": "studio.about"
+        }
+      ]
+    }
+  ]
+}

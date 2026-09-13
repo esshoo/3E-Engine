@@ -1,0 +1,26 @@
+﻿{
+  "schemaVersion": 1,
+
+  "bindings": [
+    {
+      "keys": "Ctrl+Shift+P",
+      "command": "studio.command_palette"
+    },
+    {
+      "keys": "F5",
+      "command": "game.play"
+    },
+    {
+      "keys": "Shift+F5",
+      "command": "game.stop"
+    },
+    {
+      "keys": "Ctrl+Z",
+      "command": "edit.undo"
+    },
+    {
+      "keys": "Ctrl+Y",
+      "command": "edit.redo"
+    }
+  ]
+}

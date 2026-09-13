@@ -1,0 +1,34 @@
+﻿{
+  "schemaVersion": 1,
+
+  "extends": "config/ui/default/main_menu.json",
+
+  "menus": [
+    {
+      "id": "jackie",
+      "label": "Jackie",
+      "position": "before:help",
+
+      "items": [
+        {
+          "type": "command",
+          "label": "Play Jackie",
+          "command": "jackie.play"
+        },
+        {
+          "type": "separator"
+        },
+        {
+          "type": "command",
+          "label": "Map Viewer",
+          "command": "jackie.map_viewer.open"
+        },
+        {
+          "type": "command",
+          "label": "Reload Jackie Data",
+          "command": "jackie.reload_data"
+        }
+      ]
+    }
+  ]
+}

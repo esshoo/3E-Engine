@@ -1,0 +1,4 @@
+﻿{
+  "schemaVersion": 1,
+  "extends": "config/ui/default/layout.json"
+}

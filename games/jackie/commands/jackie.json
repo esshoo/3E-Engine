@@ -1,0 +1,27 @@
+﻿{
+  "schemaVersion": 1,
+
+  "commands": [
+    {
+      "id": "jackie.play",
+      "action": {
+        "type": "game",
+        "handler": "play"
+      }
+    },
+    {
+      "id": "jackie.map_viewer.open",
+      "action": {
+        "type": "game",
+        "handler": "map_viewer.open"
+      }
+    },
+    {
+      "id": "jackie.reload_data",
+      "action": {
+        "type": "game",
+        "handler": "reload_data"
+      }
+    }
+  ]
+}

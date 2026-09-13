@@ -1,0 +1,5 @@
+﻿{
+  "schemaVersion": 1,
+  "extends": "config/ui/default/panels.json",
+  "panels": []
+}

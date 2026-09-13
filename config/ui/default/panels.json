@@ -1,0 +1,36 @@
+﻿{
+  "schemaVersion": 1,
+
+  "panels": [
+    {
+      "id": "project",
+      "title": "Project Explorer",
+      "dock": "left",
+      "visible": true
+    },
+    {
+      "id": "scene",
+      "title": "Scene",
+      "dock": "center",
+      "visible": true
+    },
+    {
+      "id": "outliner",
+      "title": "Outliner",
+      "dock": "right",
+      "visible": true
+    },
+    {
+      "id": "properties",
+      "title": "Properties",
+      "dock": "right-bottom",
+      "visible": true
+    },
+    {
+      "id": "console",
+      "title": "Console",
+      "dock": "bottom",
+      "visible": true
+    }
+  ]
+}

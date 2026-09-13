@@ -1,0 +1,14 @@
+﻿{
+  "schemaVersion": 1,
+
+  "extends": "config/ui/default/toolbar.json",
+
+  "items": [
+    {
+      "type": "command",
+      "id": "jackie-play",
+      "label": "Play Jackie",
+      "command": "jackie.play"
+    }
+  ]
+}

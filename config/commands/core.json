@@ -1,0 +1,69 @@
+﻿{
+  "schemaVersion": 1,
+
+  "commands": [
+    {
+      "id": "studio.command_palette",
+      "action": {
+        "type": "builtin",
+        "handler": "studio.command_palette"
+      }
+    },
+    {
+      "id": "studio.reload_definitions",
+      "action": {
+        "type": "builtin",
+        "handler": "studio.reload_definitions"
+      }
+    },
+    {
+      "id": "studio.exit",
+      "action": {
+        "type": "builtin",
+        "handler": "studio.exit"
+      }
+    },
+    {
+      "id": "studio.about",
+      "action": {
+        "type": "builtin",
+        "handler": "studio.about"
+      }
+    },
+    {
+      "id": "project.open",
+      "action": {
+        "type": "builtin",
+        "handler": "project.open"
+      }
+    },
+    {
+      "id": "game.play",
+      "action": {
+        "type": "builtin",
+        "handler": "game.play"
+      }
+    },
+    {
+      "id": "game.stop",
+      "action": {
+        "type": "builtin",
+        "handler": "game.stop"
+      }
+    },
+    {
+      "id": "edit.undo",
+      "action": {
+        "type": "builtin",
+        "handler": "edit.undo"
+      }
+    },
+    {
+      "id": "edit.redo",
+      "action": {
+        "type": "builtin",
+        "handler": "edit.redo"
+      }
+    }
+  ]
+}

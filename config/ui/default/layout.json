@@ -1,0 +1,19 @@
+﻿{
+  "schemaVersion": 1,
+
+  "dockspace": {
+    "left": [
+      "project"
+    ],
+    "center": [
+      "scene"
+    ],
+    "right": [
+      "outliner",
+      "properties"
+    ],
+    "bottom": [
+      "console"
+    ]
+  }
+}
