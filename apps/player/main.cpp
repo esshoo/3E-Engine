@@ -1,25 +1,10 @@
 #include "apps/player/player_app.h"
 #include "engine/runtime/runtime_root.h"
 
-#include "p3d/context.h"
-#include "pddi/pddi.h"
-#include "pddi/pddidev.h"
-
-#include <cstring>
 #include <filesystem>
 #include <string>
-#include <utility>
 
 namespace {
-
-threee::player::PlayerApp* g_playerApp =
-    nullptr;
-
-void DrawPlayerOverlay() {
-    if (g_playerApp) {
-        g_playerApp->Draw();
-    }
-}
 
 bool ParseArguments(
     int argc,
@@ -85,7 +70,7 @@ bool ParseArguments(
             argument == "-h") {
 
             error =
-                "Usage: 3E-Player [--game <id>] [--project <project.3e.json>] [--verify-runtime]";
+                "Usage: 3E-Player --game <id> --project <project.3e.json> [--verify-runtime]";
 
             return false;
         }
@@ -139,14 +124,14 @@ int main(
             argumentError;
     }
 
-    if (verifyRuntime) {
-        const std::filesystem::path reportPath =
-            runtimeRoot /
-            "3E-Player-Verify.txt";
+    const std::filesystem::path verificationPath =
+        runtimeRoot /
+        "3E-Player-Verify.txt";
 
+    if (verifyRuntime) {
         threee::player::WriteVerificationReport(
             state,
-            reportPath);
+            verificationPath);
 
         return
             state.valid
@@ -154,59 +139,31 @@ int main(
                 : 2;
     }
 
-    tPlatform* platform =
-        tPlatform::Create();
+    if (!state.valid) {
+        threee::player::WriteVerificationReport(
+            state,
+            runtimeRoot /
+                "3E-Player-Last.txt");
 
-    tContextInitData init;
-    init.xSize = 1280;
-    init.ySize = 800;
-    init.title = "3E Player";
-    init.fullscreen = false;
-    init.vsync = true;
-    init.msaa = 0;
-
-    tContext* context =
-        platform->CreateContext(init);
-
-    if (!context) {
-        tPlatform::Destroy();
-        return 1;
+        return 2;
     }
 
-    threee::player::PlayerApp player(
-        std::move(state));
+    std::string launchError;
 
-    g_playerApp = &player;
+    const int exitCode =
+        threee::player::LaunchRuntimeAndWait(
+            state,
+            launchError);
 
-    p3d::display->AddOverlayCallback(
-        DrawPlayerOverlay);
+    if (!launchError.empty()) {
+        state.error =
+            launchError;
 
-    p3d::context->SetClearColour(
-        pddiColour(
-            14,
-            15,
-            18));
-
-    while (!p3d::display->ShouldClose()) {
-        p3d::display->PollEvents();
-
-        player.Update();
-
-        context->BeginFrame();
-
-        p3d::context->Clear(
-            PDDI_BUFFER_ALL);
-
-        context->EndFrame();
-
-        p3d::display->RenderOverlay();
-        context->SwapBuffers();
+        threee::player::WriteVerificationReport(
+            state,
+            runtimeRoot /
+                "3E-Player-Last.txt");
     }
 
-    g_playerApp = nullptr;
-
-    platform->DestroyContext(context);
-    tPlatform::Destroy();
-
-    return 0;
+    return exitCode;
 }

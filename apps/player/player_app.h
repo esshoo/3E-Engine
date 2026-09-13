@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace threee::player {
 
@@ -21,6 +22,9 @@ struct PlayerRuntimeState {
 
     std::string runtimeHost;
     std::string runtimeMode;
+    std::string runtimeExecutableSpec;
+    std::string runtimeWorkingDirectorySpec;
+    std::vector<std::string> runtimeArguments;
 
     std::string projectId;
     std::string projectDisplayName;
@@ -31,24 +35,21 @@ struct PlayerRuntimeState {
     std::filesystem::path exportedAssets;
     std::filesystem::path overlayPath;
 
+    std::filesystem::path resolvedRuntimeExecutable;
+    std::filesystem::path resolvedRuntimeWorkingDirectory;
+
     std::string error;
 
     bool Load(
         std::filesystem::path inRuntimeRoot,
         const PlayerLaunchRequest& request);
+
+    bool ResolveRuntimeLaunchTarget();
 };
 
-class PlayerApp {
-public:
-    explicit PlayerApp(
-        PlayerRuntimeState state);
-
-    void Update();
-    void Draw();
-
-private:
-    PlayerRuntimeState m_state;
-};
+int LaunchRuntimeAndWait(
+    const PlayerRuntimeState& state,
+    std::string& error);
 
 bool WriteVerificationReport(
     const PlayerRuntimeState& state,

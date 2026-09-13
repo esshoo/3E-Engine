@@ -21,7 +21,9 @@
         "type": "validate",
         "paths": [
           "${GameRoot}",
-          "${ExportedAssets}"
+          "${GameRoot}/3EChan.exe",
+          "${ExportedAssets}",
+          "${GameRoot}/ExportedAssets/3EChan-Level-Viewer-Pro-v3"
         ]
       }
     }

@@ -507,10 +507,22 @@ void StudioApp::PollPlayerProcess() {
             0);
 
     if (result == WAIT_OBJECT_0) {
+        DWORD exitCode = 0;
+        GetExitCodeProcess(
+            process,
+            &exitCode);
+
         CloseHandle(process);
 
         m_playerProcessHandle = nullptr;
         m_playerProcessId = 0;
+
+        m_status =
+            exitCode == 0
+                ? "3E Player/native runtime exited normally."
+                : "3E Player/native runtime exited with code " +
+                    std::to_string(exitCode) +
+                    ". See 3E-Player-Last.txt if present.";
     }
 #endif
 }
@@ -895,7 +907,7 @@ void StudioApp::DrawPlaceholderPanel(
 
     if (panel.id == "scene") {
         ImGui::TextUnformatted(
-            "Scene Workspace");
+            "Jackie Workspace");
 
         ImGui::Separator();
 
@@ -909,16 +921,42 @@ void StudioApp::DrawPlaceholderPanel(
             ImGui::Text(
                 "Game: %s",
                 project->gameId.c_str());
+
+            ImGui::TextWrapped(
+                "Game Root: %s",
+                project->gameRoot.string().c_str());
+
+            ImGui::Spacing();
+
+            if (project->gameId == "jackie") {
+                if (ImGui::Button("Play Jackie")) {
+                    ExecuteCommand("jackie.play");
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Open Map Viewer")) {
+                    ExecuteCommand("jackie.map_viewer.open");
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Stop")) {
+                    ExecuteCommand("game.stop");
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextWrapped(
+                    "Play uses the project's proven native 3EChan.exe runtime. "
+                    "Map Viewer opens the latest available 3EChan browser level viewer "
+                    "from the project's GameRoot/ExportedAssets folder.");
+            }
         }
         else {
             ImGui::TextDisabled(
                 "No active project.");
         }
-
-        ImGui::Spacing();
-
-        ImGui::TextDisabled(
-            "The native Jackie map document/viewer will attach here.");
     }
     else if (panel.id == "outliner") {
         ImGui::TextUnformatted(

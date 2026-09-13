@@ -1,33 +1,31 @@
-﻿{
+{
   "schemaVersion": 1,
-
   "id": "jackie",
   "displayName": "Jackie Chan Stuntmaster",
   "enabled": true,
-
   "integration": {
     "state": "legacy-bridge",
     "legacySourceRoot": "src",
     "legacyBuildTarget": "rechan"
   },
-
   "ui": {
     "renderer": "imgui",
     "inherits": "config/ui/default",
     "root": "ui",
     "liveReload": true
   },
-
   "paths": {
     "commands": "commands",
     "schemas": "schemas",
     "scripts": "scripts",
     "pipelines": "pipelines"
   },
-
   "runtime": {
     "host": "3E-Player",
     "mode": "legacy-bridge",
-    "legacyTarget": "rechan"
+    "legacyTarget": "rechan",
+    "executable": "${GameRoot}/3EChan.exe",
+    "workingDirectory": "${GameRoot}",
+    "arguments": []
   }
 }

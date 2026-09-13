@@ -2,11 +2,16 @@
 
 #include "engine/data/json_value.h"
 
-#include <imgui.h>
-
+#include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <system_error>
 #include <utility>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 namespace threee::player {
 
@@ -23,13 +28,10 @@ std::filesystem::path ResolveProjectPath(
     std::filesystem::path path(value);
 
     if (path.is_absolute()) {
-        return
-            path.lexically_normal();
+        return path.lexically_normal();
     }
 
-    return
-        (projectRoot / path)
-            .lexically_normal();
+    return (projectRoot / path).lexically_normal();
 }
 
 std::string NestedString(
@@ -40,13 +42,11 @@ std::string NestedString(
     const data::JsonValue* object =
         root.Find(objectName);
 
-    if (!object ||
-        !object->IsObject()) {
+    if (!object || !object->IsObject()) {
         return {};
     }
 
-    return
-        object->GetString(key);
+    return object->GetString(key);
 }
 
 bool Exists(
@@ -57,12 +57,141 @@ bool Exists(
     }
 
     std::error_code ec;
-
-    return
-        std::filesystem::exists(
-            path,
-            ec);
+    return std::filesystem::exists(path, ec);
 }
+
+void ReplaceAll(
+    std::string& value,
+    const std::string& token,
+    const std::string& replacement) {
+
+    if (token.empty()) {
+        return;
+    }
+
+    std::size_t position = 0;
+
+    while ((position = value.find(token, position)) !=
+           std::string::npos) {
+
+        value.replace(
+            position,
+            token.size(),
+            replacement);
+
+        position += replacement.size();
+    }
+}
+
+std::string ExpandRuntimeValue(
+    std::string value,
+    const PlayerRuntimeState& state) {
+
+    ReplaceAll(
+        value,
+        "${RuntimeRoot}",
+        state.runtimeRoot.string());
+
+    ReplaceAll(
+        value,
+        "${ProjectRoot}",
+        state.projectRoot.string());
+
+    ReplaceAll(
+        value,
+        "${GameRoot}",
+        state.sourceGameRoot.string());
+
+    ReplaceAll(
+        value,
+        "${ExportedAssets}",
+        state.exportedAssets.string());
+
+    ReplaceAll(
+        value,
+        "${Overlay}",
+        state.overlayPath.string());
+
+    ReplaceAll(
+        value,
+        "${GameId}",
+        state.gameId);
+
+    ReplaceAll(
+        value,
+        "${ProjectId}",
+        state.projectId);
+
+    return value;
+}
+
+bool HasUnresolvedVariable(
+    const std::string& value) {
+
+    return value.find("${") != std::string::npos;
+}
+
+std::vector<std::string> ReadStringArray(
+    const data::JsonValue* value) {
+
+    std::vector<std::string> result;
+
+    if (!value || !value->IsArray()) {
+        return result;
+    }
+
+    for (const data::JsonValue& item :
+         value->arrayValue) {
+
+        if (item.IsString()) {
+            result.push_back(item.stringValue);
+        }
+    }
+
+    return result;
+}
+
+#if defined(_WIN32)
+std::wstring QuoteWindowsArgument(
+    const std::wstring& argument) {
+
+    if (argument.empty()) {
+        return L"\"\"";
+    }
+
+    if (argument.find_first_of(L" \t\"") ==
+        std::wstring::npos) {
+
+        return argument;
+    }
+
+    std::wstring result = L"\"";
+    std::size_t backslashes = 0;
+
+    for (const wchar_t c : argument) {
+        if (c == L'\\') {
+            ++backslashes;
+            continue;
+        }
+
+        if (c == L'\"') {
+            result.append(backslashes * 2 + 1, L'\\');
+            result.push_back(L'\"');
+            backslashes = 0;
+            continue;
+        }
+
+        result.append(backslashes, L'\\');
+        backslashes = 0;
+        result.push_back(c);
+    }
+
+    result.append(backslashes * 2, L'\\');
+    result.push_back(L'\"');
+
+    return result;
+}
+#endif
 
 } // namespace
 
@@ -204,9 +333,7 @@ bool PlayerRuntimeState::Load(
             return false;
         }
 
-        if (!sourceGameRoot.empty() &&
-            !Exists(sourceGameRoot)) {
-
+        if (!Exists(sourceGameRoot)) {
             error =
                 "Project GameRoot not found: " +
                 sourceGameRoot.string();
@@ -214,9 +341,7 @@ bool PlayerRuntimeState::Load(
             return false;
         }
 
-        if (!exportedAssets.empty() &&
-            !Exists(exportedAssets)) {
-
+        if (!Exists(exportedAssets)) {
             error =
                 "Project ExportedAssets not found: " +
                 exportedAssets.string();
@@ -224,9 +349,7 @@ bool PlayerRuntimeState::Load(
             return false;
         }
 
-        if (!overlayPath.empty() &&
-            !Exists(overlayPath)) {
-
+        if (!Exists(overlayPath)) {
             error =
                 "Project Overlay not found: " +
                 overlayPath.string();
@@ -312,17 +435,33 @@ bool PlayerRuntimeState::Load(
             "displayName",
             gameId);
 
+    const data::JsonValue* runtime =
+        game.root.Find("runtime");
+
+    if (!runtime || !runtime->IsObject()) {
+        error =
+            "Game manifest is missing runtime configuration.";
+
+        return false;
+    }
+
     runtimeHost =
-        NestedString(
-            game.root,
-            "runtime",
-            "host");
+        runtime->GetString("host");
 
     runtimeMode =
-        NestedString(
-            game.root,
-            "runtime",
-            "mode");
+        runtime->GetString("mode");
+
+    runtimeExecutableSpec =
+        runtime->GetString("executable");
+
+    runtimeWorkingDirectorySpec =
+        runtime->GetString(
+            "workingDirectory",
+            "${GameRoot}");
+
+    runtimeArguments =
+        ReadStringArray(
+            runtime->Find("arguments"));
 
     if (!runtimeHost.empty() &&
         runtimeHost != "3E-Player") {
@@ -334,126 +473,324 @@ bool PlayerRuntimeState::Load(
         return false;
     }
 
+    if (runtimeMode != "legacy-bridge") {
+        error =
+            "Unsupported runtime mode: " +
+            runtimeMode;
+
+        return false;
+    }
+
+    if (runtimeExecutableSpec.empty()) {
+        error =
+            "Legacy bridge is missing runtime.executable.";
+
+        return false;
+    }
+
+    if (!projectManifest.empty() &&
+        !ResolveRuntimeLaunchTarget()) {
+
+        return false;
+    }
+
     valid = true;
     error.clear();
 
     return true;
 }
 
-PlayerApp::PlayerApp(
-    PlayerRuntimeState state)
-    : m_state(std::move(state)) {
-}
+bool PlayerRuntimeState::ResolveRuntimeLaunchTarget() {
+    const std::string expandedExecutable =
+        ExpandRuntimeValue(
+            runtimeExecutableSpec,
+            *this);
 
-void PlayerApp::Update() {
-}
+    if (expandedExecutable.empty() ||
+        HasUnresolvedVariable(expandedExecutable)) {
 
-void PlayerApp::Draw() {
-    ImGui::SetNextWindowSize(
-        ImVec2(760.0f, 500.0f),
-        ImGuiCond_FirstUseEver);
+        error =
+            "Runtime executable could not be resolved: " +
+            runtimeExecutableSpec;
 
-    if (!ImGui::Begin(
-            "3E Player - Runtime")) {
-
-        ImGui::End();
-        return;
+        return false;
     }
 
-    ImGui::TextUnformatted(
-        "3E Player");
+    resolvedRuntimeExecutable =
+        std::filesystem::path(
+            expandedExecutable);
 
-    ImGui::Separator();
+    if (resolvedRuntimeExecutable.is_relative()) {
+        const std::filesystem::path base =
+            sourceGameRoot.empty()
+                ? runtimeRoot
+                : sourceGameRoot;
 
-    ImGui::TextWrapped(
-        "Runtime root: %s",
-        m_state.runtimeRoot
-            .string()
-            .c_str());
-
-    ImGui::Separator();
-
-    if (!m_state.valid) {
-        ImGui::TextUnformatted(
-            "Runtime launch failed.");
-
-        ImGui::TextWrapped(
-            "Error: %s",
-            m_state.error.c_str());
-
-        ImGui::End();
-        return;
-    }
-
-    ImGui::Text(
-        "Game: %s [%s]",
-        m_state.gameDisplayName.c_str(),
-        m_state.gameId.c_str());
-
-    ImGui::TextWrapped(
-        "Game manifest: %s",
-        m_state.gameManifest
-            .string()
-            .c_str());
-
-    ImGui::Text(
-        "Runtime host: %s",
-        m_state.runtimeHost.empty()
-            ? "unspecified"
-            : m_state.runtimeHost.c_str());
-
-    ImGui::Text(
-        "Runtime mode: %s",
-        m_state.runtimeMode.empty()
-            ? "unspecified"
-            : m_state.runtimeMode.c_str());
-
-    ImGui::Separator();
-
-    if (!m_state.projectManifest.empty()) {
-        ImGui::Text(
-            "Project: %s [%s]",
-            m_state.projectDisplayName.c_str(),
-            m_state.projectId.c_str());
-
-        ImGui::TextWrapped(
-            "Project manifest: %s",
-            m_state.projectManifest
-                .string()
-                .c_str());
-
-        ImGui::TextWrapped(
-            "Game source: %s",
-            m_state.sourceGameRoot
-                .string()
-                .c_str());
-
-        ImGui::TextWrapped(
-            "ExportedAssets: %s",
-            m_state.exportedAssets
-                .string()
-                .c_str());
-
-        ImGui::TextWrapped(
-            "Overlay: %s",
-            m_state.overlayPath
-                .string()
-                .c_str());
+        resolvedRuntimeExecutable =
+            (base / resolvedRuntimeExecutable)
+                .lexically_normal();
     }
     else {
-        ImGui::TextDisabled(
-            "No project manifest was supplied.");
+        resolvedRuntimeExecutable =
+            resolvedRuntimeExecutable
+                .lexically_normal();
     }
 
-    ImGui::Separator();
+    const std::string expandedWorkingDirectory =
+        ExpandRuntimeValue(
+            runtimeWorkingDirectorySpec,
+            *this);
 
-    ImGui::TextUnformatted(
-        "Universal runtime bootstrap is active.");
+    if (expandedWorkingDirectory.empty() ||
+        HasUnresolvedVariable(
+            expandedWorkingDirectory)) {
 
-    ImGui::TextDisabled(
-        "The selected game's native runtime adapter will attach here in the next Jackie integration milestone.");
+        resolvedRuntimeWorkingDirectory =
+            sourceGameRoot;
+    }
+    else {
+        resolvedRuntimeWorkingDirectory =
+            std::filesystem::path(
+                expandedWorkingDirectory);
 
-    ImGui::End();
+        if (resolvedRuntimeWorkingDirectory.is_relative()) {
+            const std::filesystem::path base =
+                sourceGameRoot.empty()
+                    ? runtimeRoot
+                    : sourceGameRoot;
+
+            resolvedRuntimeWorkingDirectory =
+                (base / resolvedRuntimeWorkingDirectory)
+                    .lexically_normal();
+        }
+        else {
+            resolvedRuntimeWorkingDirectory =
+                resolvedRuntimeWorkingDirectory
+                    .lexically_normal();
+        }
+    }
+
+    if (!Exists(resolvedRuntimeExecutable)) {
+        error =
+            "Runtime executable not found: " +
+            resolvedRuntimeExecutable.string();
+
+        return false;
+    }
+
+    if (resolvedRuntimeWorkingDirectory.empty() ||
+        !Exists(resolvedRuntimeWorkingDirectory)) {
+
+        error =
+            "Runtime working directory not found: " +
+            resolvedRuntimeWorkingDirectory.string();
+
+        return false;
+    }
+
+    return true;
+}
+
+int LaunchRuntimeAndWait(
+    const PlayerRuntimeState& state,
+    std::string& error) {
+
+    if (!state.valid) {
+        error =
+            state.error.empty()
+                ? "Runtime state is invalid."
+                : state.error;
+
+        return 2;
+    }
+
+    if (state.projectManifest.empty()) {
+        error =
+            "A project manifest is required to launch this runtime.";
+
+        return 3;
+    }
+
+    if (state.resolvedRuntimeExecutable.empty()) {
+        error =
+            "Runtime executable is not resolved.";
+
+        return 4;
+    }
+
+#if defined(_WIN32)
+    std::wstring commandLine =
+        QuoteWindowsArgument(
+            state.resolvedRuntimeExecutable
+                .wstring());
+
+    for (const std::string& rawArgument :
+         state.runtimeArguments) {
+
+        const std::string expanded =
+            ExpandRuntimeValue(
+                rawArgument,
+                state);
+
+        commandLine += L" ";
+        commandLine +=
+            QuoteWindowsArgument(
+                std::filesystem::path(
+                    expanded)
+                    .wstring());
+    }
+
+    std::vector<wchar_t> mutableCommand(
+        commandLine.begin(),
+        commandLine.end());
+
+    mutableCommand.push_back(L'\0');
+
+    HANDLE job =
+        CreateJobObjectW(
+            nullptr,
+            nullptr);
+
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info {};
+
+        info.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        if (!SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info,
+                sizeof(info))) {
+
+            CloseHandle(job);
+            job = nullptr;
+        }
+    }
+
+    STARTUPINFOW startup {};
+    startup.cb = sizeof(startup);
+
+    PROCESS_INFORMATION process {};
+
+    const BOOL created =
+        CreateProcessW(
+            state.resolvedRuntimeExecutable
+                .wstring()
+                .c_str(),
+            mutableCommand.data(),
+            nullptr,
+            nullptr,
+            FALSE,
+            0,
+            nullptr,
+            state.resolvedRuntimeWorkingDirectory
+                .wstring()
+                .c_str(),
+            &startup,
+            &process);
+
+    if (!created) {
+        if (job) {
+            CloseHandle(job);
+        }
+
+        error =
+            "CreateProcessW failed for " +
+            state.resolvedRuntimeExecutable.string() +
+            ". Win32 error: " +
+            std::to_string(GetLastError());
+
+        return 5;
+    }
+
+    if (job) {
+        if (!AssignProcessToJobObject(
+                job,
+                process.hProcess)) {
+
+            CloseHandle(job);
+            job = nullptr;
+        }
+    }
+
+    CloseHandle(process.hThread);
+
+    const DWORD waitResult =
+        WaitForSingleObject(
+            process.hProcess,
+            INFINITE);
+
+    DWORD exitCode = 0;
+
+    if (waitResult == WAIT_OBJECT_0) {
+        GetExitCodeProcess(
+            process.hProcess,
+            &exitCode);
+    }
+    else {
+        error =
+            "Waiting for runtime process failed. Win32 error: " +
+            std::to_string(GetLastError());
+
+        exitCode = 6;
+    }
+
+    CloseHandle(process.hProcess);
+
+    if (job) {
+        CloseHandle(job);
+    }
+
+    return static_cast<int>(exitCode);
+#else
+    std::error_code ec;
+    const std::filesystem::path previousDirectory =
+        std::filesystem::current_path(ec);
+
+    ec.clear();
+    std::filesystem::current_path(
+        state.resolvedRuntimeWorkingDirectory,
+        ec);
+
+    if (ec) {
+        error =
+            "Cannot enter runtime working directory: " +
+            ec.message();
+
+        return 7;
+    }
+
+    std::ostringstream command;
+    command
+        << '"'
+        << state.resolvedRuntimeExecutable.string()
+        << '"';
+
+    for (const std::string& rawArgument :
+         state.runtimeArguments) {
+
+        command
+            << " \""
+            << ExpandRuntimeValue(
+                   rawArgument,
+                   state)
+            << '"';
+    }
+
+    const int result =
+        std::system(
+            command.str().c_str());
+
+    if (!previousDirectory.empty()) {
+        ec.clear();
+        std::filesystem::current_path(
+            previousDirectory,
+            ec);
+    }
+
+    return result;
+#endif
 }
 
 bool WriteVerificationReport(
@@ -491,6 +828,15 @@ bool WriteVerificationReport(
         << "\n"
         << "RuntimeMode="
         << state.runtimeMode
+        << "\n"
+        << "RuntimeExecutableSpec="
+        << state.runtimeExecutableSpec
+        << "\n"
+        << "ResolvedRuntimeExecutable="
+        << state.resolvedRuntimeExecutable.string()
+        << "\n"
+        << "RuntimeWorkingDirectory="
+        << state.resolvedRuntimeWorkingDirectory.string()
         << "\n"
         << "ProjectId="
         << state.projectId

@@ -253,12 +253,6 @@ project "3E-Player"
     includedirs {
         ".",
         "engine",
-        "vendor/libp3d",
-        "vendor/libp3d/vendor/imgui",
-    }
-
-    links {
-        "libp3d",
     }
 
     defines {
@@ -270,21 +264,9 @@ project "3E-Player"
         entrypoint "mainCRTStartup"
         systemversion "latest"
         defines { "RC_PLATFORM_WINDOWS" }
-        links {
-            "opengl32",
-            "cfgmgr32",
-            "imm32",
-            "setupapi",
-            "version",
-            "winmm",
-        }
 
     filter "system:linux"
         defines { "RC_PLATFORM_LINUX", "PLATFORM_LINUX" }
-        links {
-            "GL", "X11", "Xcursor", "Xi", "Xinerama", "Xrandr",
-            "SDL2", "pthread", "dl", "m",
-        }
 
     filter "configurations:Debug"
         runtime "Debug"

@@ -1,14 +1,18 @@
-﻿{
+{
   "schemaVersion": 1,
-
   "extends": "config/ui/default/toolbar.json",
-
   "items": [
     {
       "type": "command",
-      "id": "jackie-play",
+      "id": "play",
       "label": "Play Jackie",
       "command": "jackie.play"
+    },
+    {
+      "type": "command",
+      "id": "jackie-map-viewer",
+      "label": "Map Viewer",
+      "command": "jackie.map_viewer.open"
     }
   ]
 }

@@ -1,6 +1,5 @@
 {
   "schemaVersion": 1,
-
   "commands": [
     {
       "id": "jackie.play",
@@ -12,15 +11,25 @@
     {
       "id": "jackie.map_viewer.open",
       "action": {
-        "type": "game",
-        "handler": "map_viewer.open"
+        "type": "process",
+        "program": "powershell.exe",
+        "arguments": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${RuntimeRoot}/games/jackie/scripts/open-map-viewer.ps1",
+          "-GameRoot",
+          "${GameRoot}"
+        ],
+        "workingDirectory": "${RuntimeRoot}"
       }
     },
     {
       "id": "jackie.reload_data",
       "action": {
-        "type": "game",
-        "handler": "reload_data"
+        "type": "builtin",
+        "handler": "studio.reload_definitions"
       }
     }
   ]

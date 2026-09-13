@@ -1,12 +1,11 @@
 {
   "schemaVersion": 1,
-
   "panels": [
     {
       "id": "games",
       "title": "Game Library",
       "dock": "left",
-      "visible": true
+      "visible": false
     },
     {
       "id": "projects",
@@ -24,19 +23,19 @@
       "id": "outliner",
       "title": "Outliner",
       "dock": "right",
-      "visible": true
+      "visible": false
     },
     {
       "id": "properties",
       "title": "Properties",
       "dock": "right",
-      "visible": true
+      "visible": false
     },
     {
       "id": "assets",
       "title": "Asset Browser",
       "dock": "bottom",
-      "visible": true
+      "visible": false
     },
     {
       "id": "console",
