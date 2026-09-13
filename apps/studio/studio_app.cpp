@@ -148,7 +148,8 @@ StudioApp::StudioApp(std::filesystem::path runtimeRoot)
       m_gameRegistry(m_runtimeRoot),
       m_projectRegistry(m_runtimeRoot),
       m_commandRegistry(m_runtimeRoot),
-      m_uiRegistry(m_runtimeRoot) {
+      m_uiRegistry(m_runtimeRoot),
+      m_actionExecutor(m_runtimeRoot) {
 
     RegisterBuiltInCommands();
     ReloadUi(true);
@@ -321,6 +322,33 @@ void StudioApp::ReloadUi(bool force) {
         std::to_string(m_reloadGeneration);
 }
 
+const ProjectDescriptor* StudioApp::FindActiveProject() const {
+    if (m_selectedProjectId.empty()) {
+        return nullptr;
+    }
+
+    for (const ProjectDescriptor& project :
+         m_projectRegistry.GetProjects()) {
+
+        if (project.id == m_selectedProjectId) {
+            return &project;
+        }
+    }
+
+    return nullptr;
+}
+
+ActionContext StudioApp::BuildActionContext() const {
+    ActionContext context;
+
+    context.runtimeRoot = m_runtimeRoot;
+    context.activeGameId = m_selectedGameId;
+    context.activeProjectId = m_selectedProjectId;
+    context.project = FindActiveProject();
+
+    return context;
+}
+
 void StudioApp::ExecuteResolvedCommand(
     const CommandDescriptor& command) {
 
@@ -354,9 +382,15 @@ void StudioApp::ExecuteResolvedCommand(
         return;
     }
 
+    const ActionResult result =
+        m_actionExecutor.Execute(
+            command,
+            BuildActionContext());
+
     m_status =
-        "Command action type registered but not executable yet: " +
-        command.actionType;
+        result.success
+            ? result.message
+            : "ERROR: " + result.message;
 }
 
 void StudioApp::ExecuteCommand(

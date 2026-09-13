@@ -5,6 +5,7 @@
 #include <system_error>
 #include <unordered_map>
 #include <utility>
+#include <cstdint>
 
 namespace threee::studio {
 

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    {
+      "id": "jackie.open_game_root",
+      "action": {
+        "type": "open",
+        "path": "${GameRoot}"
+      }
+    },
+    {
+      "id": "jackie.open_exported_assets",
+      "action": {
+        "type": "open",
+        "path": "${ExportedAssets}"
+      }
+    },
+    {
+      "id": "jackie.validate_sources",
+      "action": {
+        "type": "validate",
+        "paths": [
+          "${GameRoot}",
+          "${ExportedAssets}"
+        ]
+      }
+    }
+  ]
+}

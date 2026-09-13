@@ -176,6 +176,7 @@ project "3E-Studio"
             "setupapi",
             "version",
             "winmm",
+            "shell32",
         }
 
     filter "system:linux"

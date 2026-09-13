@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    {
+      "id": "project.open_root",
+      "action": {
+        "type": "open",
+        "path": "${ProjectRoot}"
+      }
+    },
+    {
+      "id": "project.open_overlay",
+      "action": {
+        "type": "open",
+        "path": "${Overlay}"
+      }
+    },
+    {
+      "id": "project.validate_paths",
+      "action": {
+        "type": "validate",
+        "paths": [
+          "${ProjectRoot}",
+          "${GameRoot}",
+          "${ExportedAssets}",
+          "${Overlay}",
+          "${Cache}",
+          "${Temp}"
+        ]
+      }
+    },
+    {
+      "id": "project.backup",
+      "action": {
+        "type": "backup",
+        "source": "${ProjectRoot}",
+        "destination": "${ProjectRoot}/../_Backups/${ActiveProject}-${Timestamp}"
+      }
+    }
+  ]
+}

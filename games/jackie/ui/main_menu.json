@@ -1,4 +1,4 @@
-﻿{
+{
   "schemaVersion": 1,
 
   "extends": "config/ui/default/main_menu.json",
@@ -14,6 +14,24 @@
           "type": "command",
           "label": "Play Jackie",
           "command": "jackie.play"
+        },
+        {
+          "type": "separator"
+        },
+        {
+          "type": "command",
+          "label": "Open Game Root",
+          "command": "jackie.open_game_root"
+        },
+        {
+          "type": "command",
+          "label": "Open ExportedAssets",
+          "command": "jackie.open_exported_assets"
+        },
+        {
+          "type": "command",
+          "label": "Validate Jackie Sources",
+          "command": "jackie.validate_sources"
         },
         {
           "type": "separator"

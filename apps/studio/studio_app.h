@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apps/studio/action_executor.h"
 #include "apps/studio/command_registry.h"
 #include "apps/studio/game_registry.h"
 #include "apps/studio/project_registry.h"
@@ -35,6 +36,7 @@ private:
     ProjectRegistry m_projectRegistry;
     CommandRegistry m_commandRegistry;
     UiRegistry m_uiRegistry;
+    ActionExecutor m_actionExecutor;
 
     data::JsonDocument m_uiDocument;
 
@@ -62,6 +64,9 @@ private:
 
     void SetActiveGame(const std::string& gameId);
     void SelectProject(const ProjectDescriptor& project);
+
+    const ProjectDescriptor* FindActiveProject() const;
+    ActionContext BuildActionContext() const;
 
     void ExecuteCommand(const std::string& commandId);
     void ExecuteResolvedCommand(const CommandDescriptor& command);
