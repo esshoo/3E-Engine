@@ -1,10 +1,16 @@
-﻿{
+{
   "schemaVersion": 1,
 
   "panels": [
     {
-      "id": "project",
-      "title": "Project Explorer",
+      "id": "games",
+      "title": "Game Library",
+      "dock": "left",
+      "visible": true
+    },
+    {
+      "id": "projects",
+      "title": "Project Library",
       "dock": "left",
       "visible": true
     },
@@ -23,7 +29,13 @@
     {
       "id": "properties",
       "title": "Properties",
-      "dock": "right-bottom",
+      "dock": "right",
+      "visible": true
+    },
+    {
+      "id": "assets",
+      "title": "Asset Browser",
+      "dock": "bottom",
       "visible": true
     },
     {

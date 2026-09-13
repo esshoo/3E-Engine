@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -157,6 +158,7 @@ StudioApp::StudioApp(std::filesystem::path runtimeRoot)
 
     RegisterBuiltInCommands();
     ReloadUi(true);
+    SyncPanelVisibility();
 
     const auto& projects =
         m_projectRegistry.GetProjects();
@@ -253,6 +255,7 @@ void StudioApp::SetActiveGame(
 
     m_commandRegistry.SetActiveGame(gameId);
     m_uiRegistry.SetActiveGame(gameId);
+    SyncPanelVisibility();
 }
 
 void StudioApp::SelectProject(
@@ -280,6 +283,7 @@ void StudioApp::Update() {
     m_commandRegistry.Update();
     m_uiRegistry.Update();
     m_assetRegistry.Update();
+    SyncPanelVisibility();
 
     const auto now =
         std::chrono::steady_clock::now();
@@ -424,6 +428,9 @@ void StudioApp::ExecuteCommand(
     if (commandId.empty()) {
         return;
     }
+    if (TogglePanelCommand(commandId)) {
+        return;
+    }
 
     const CommandDescriptor* command =
         m_commandRegistry.Find(commandId);
@@ -448,6 +455,437 @@ void StudioApp::ExecuteCommand(
         commandId;
 }
 
+void StudioApp::SyncPanelVisibility() {
+    const unsigned int generation =
+        m_uiRegistry.GetGeneration();
+
+    if (generation == m_lastUiGeneration) {
+        return;
+    }
+
+    const auto previous =
+        m_panelVisibility;
+
+    m_panelVisibility.clear();
+
+    for (const UiPanel& panel :
+         m_uiRegistry.GetPanels()) {
+
+        const auto old =
+            previous.find(panel.id);
+
+        m_panelVisibility[panel.id] =
+            old != previous.end()
+                ? old->second
+                : panel.visible;
+    }
+
+    m_lastUiGeneration = generation;
+}
+
+bool StudioApp::TogglePanelCommand(
+    const std::string& commandId) {
+
+    constexpr std::string_view prefix = "panel.";
+    constexpr std::string_view suffix = ".toggle";
+
+    if (commandId.size() <=
+        prefix.size() + suffix.size()) {
+        return false;
+    }
+
+    if (commandId.compare(
+            0,
+            prefix.size(),
+            prefix) != 0) {
+        return false;
+    }
+
+    if (commandId.compare(
+            commandId.size() - suffix.size(),
+            suffix.size(),
+            suffix) != 0) {
+        return false;
+    }
+
+    const std::string panelId =
+        commandId.substr(
+            prefix.size(),
+            commandId.size() -
+                prefix.size() -
+                suffix.size());
+
+    const auto panel =
+        m_panelVisibility.find(panelId);
+
+    if (panel == m_panelVisibility.end()) {
+        m_status =
+            "Unknown panel: " +
+            panelId;
+
+        return true;
+    }
+
+    panel->second =
+        !panel->second;
+
+    m_status =
+        std::string(
+            panel->second
+                ? "Opened panel: "
+                : "Closed panel: ") +
+        panelId;
+
+    return true;
+}
+
+bool StudioApp::IsShortcutPressed(
+    const std::string& expression) const {
+
+    if (expression.empty()) {
+        return false;
+    }
+
+    bool needCtrl = false;
+    bool needShift = false;
+    bool needAlt = false;
+    bool needSuper = false;
+
+    std::string keyToken;
+
+    std::size_t begin = 0;
+
+    while (begin <= expression.size()) {
+        const std::size_t end =
+            expression.find(
+                '+',
+                begin);
+
+        std::string token =
+            expression.substr(
+                begin,
+                end == std::string::npos
+                    ? std::string::npos
+                    : end - begin);
+
+        token.erase(
+            std::remove_if(
+                token.begin(),
+                token.end(),
+                [](unsigned char c) {
+                    return std::isspace(c) != 0;
+                }),
+            token.end());
+
+        std::transform(
+            token.begin(),
+            token.end(),
+            token.begin(),
+            [](unsigned char c) {
+                return static_cast<char>(
+                    std::toupper(c));
+            });
+
+        if (token == "CTRL" ||
+            token == "CONTROL") {
+            needCtrl = true;
+        }
+        else if (token == "SHIFT") {
+            needShift = true;
+        }
+        else if (token == "ALT") {
+            needAlt = true;
+        }
+        else if (token == "SUPER" ||
+                 token == "WIN" ||
+                 token == "CMD") {
+            needSuper = true;
+        }
+        else if (!token.empty()) {
+            keyToken = token;
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+
+        begin = end + 1;
+    }
+
+    if (keyToken.empty()) {
+        return false;
+    }
+
+    const ImGuiIO& io =
+        ImGui::GetIO();
+
+    if (io.KeyCtrl != needCtrl ||
+        io.KeyShift != needShift ||
+        io.KeyAlt != needAlt ||
+        io.KeySuper != needSuper) {
+        return false;
+    }
+
+    ImGuiKey key =
+        ImGuiKey_None;
+
+    if (keyToken.size() == 1 &&
+        keyToken[0] >= 'A' &&
+        keyToken[0] <= 'Z') {
+
+        key = static_cast<ImGuiKey>(
+            static_cast<int>(ImGuiKey_A) +
+            (keyToken[0] - 'A'));
+    }
+    else if (keyToken.size() == 1 &&
+             keyToken[0] >= '0' &&
+             keyToken[0] <= '9') {
+
+        key = static_cast<ImGuiKey>(
+            static_cast<int>(ImGuiKey_0) +
+            (keyToken[0] - '0'));
+    }
+    else if (keyToken == "F1") key = ImGuiKey_F1;
+    else if (keyToken == "F2") key = ImGuiKey_F2;
+    else if (keyToken == "F3") key = ImGuiKey_F3;
+    else if (keyToken == "F4") key = ImGuiKey_F4;
+    else if (keyToken == "F5") key = ImGuiKey_F5;
+    else if (keyToken == "F6") key = ImGuiKey_F6;
+    else if (keyToken == "F7") key = ImGuiKey_F7;
+    else if (keyToken == "F8") key = ImGuiKey_F8;
+    else if (keyToken == "F9") key = ImGuiKey_F9;
+    else if (keyToken == "F10") key = ImGuiKey_F10;
+    else if (keyToken == "F11") key = ImGuiKey_F11;
+    else if (keyToken == "F12") key = ImGuiKey_F12;
+    else if (keyToken == "ESC" ||
+             keyToken == "ESCAPE") key = ImGuiKey_Escape;
+    else if (keyToken == "ENTER") key = ImGuiKey_Enter;
+    else if (keyToken == "SPACE") key = ImGuiKey_Space;
+    else if (keyToken == "TAB") key = ImGuiKey_Tab;
+    else if (keyToken == "DELETE" ||
+             keyToken == "DEL") key = ImGuiKey_Delete;
+    else if (keyToken == "BACKSPACE") key = ImGuiKey_Backspace;
+    else if (keyToken == "UP") key = ImGuiKey_UpArrow;
+    else if (keyToken == "DOWN") key = ImGuiKey_DownArrow;
+    else if (keyToken == "LEFT") key = ImGuiKey_LeftArrow;
+    else if (keyToken == "RIGHT") key = ImGuiKey_RightArrow;
+    else if (keyToken == "HOME") key = ImGuiKey_Home;
+    else if (keyToken == "END") key = ImGuiKey_End;
+    else if (keyToken == "PAGEUP") key = ImGuiKey_PageUp;
+    else if (keyToken == "PAGEDOWN") key = ImGuiKey_PageDown;
+
+    return
+        key != ImGuiKey_None &&
+        ImGui::IsKeyPressed(
+            key,
+            false);
+}
+
+void StudioApp::ProcessShortcuts() {
+    for (const UiShortcut& shortcut :
+         m_uiRegistry.GetShortcuts()) {
+
+        if (IsShortcutPressed(
+                shortcut.keys)) {
+
+            ExecuteCommand(
+                shortcut.command);
+
+            break;
+        }
+    }
+}
+
+void StudioApp::ApplyPanelLayoutHint(
+    const UiPanel& panel) const {
+
+    const ImGuiViewport* viewport =
+        ImGui::GetMainViewport();
+
+    if (!viewport) {
+        return;
+    }
+
+    const ImVec2 position =
+        viewport->WorkPos;
+
+    const ImVec2 size =
+        viewport->WorkSize;
+
+    ImVec2 target = position;
+
+    if (panel.dock == "center") {
+        target.x += size.x * 0.22f;
+        target.y += 90.0f;
+    }
+    else if (panel.dock == "right") {
+        target.x += size.x * 0.72f;
+        target.y += 90.0f;
+    }
+    else if (panel.dock == "bottom") {
+        target.x += size.x * 0.22f;
+        target.y += size.y * 0.70f;
+    }
+    else {
+        target.x += 10.0f;
+        target.y += 90.0f;
+    }
+
+    ImGui::SetNextWindowPos(
+        target,
+        ImGuiCond_FirstUseEver);
+}
+
+void StudioApp::DrawPlaceholderPanel(
+    const UiPanel& panel) {
+
+    bool& visible =
+        m_panelVisibility[panel.id];
+
+    ApplyPanelLayoutHint(panel);
+
+    const std::string title =
+        panel.title.empty()
+            ? panel.id
+            : panel.title;
+
+    if (!ImGui::Begin(
+            title.c_str(),
+            &visible)) {
+
+        ImGui::End();
+        return;
+    }
+
+    if (panel.id == "scene") {
+        ImGui::TextUnformatted(
+            "Scene Workspace");
+
+        ImGui::Separator();
+
+        if (const ProjectDescriptor* project =
+                FindActiveProject()) {
+
+            ImGui::Text(
+                "Project: %s",
+                project->displayName.c_str());
+
+            ImGui::Text(
+                "Game: %s",
+                project->gameId.c_str());
+        }
+        else {
+            ImGui::TextDisabled(
+                "No active project.");
+        }
+
+        ImGui::Spacing();
+
+        ImGui::TextDisabled(
+            "The native Jackie map document/viewer will attach here.");
+    }
+    else if (panel.id == "outliner") {
+        ImGui::TextUnformatted(
+            "Outliner");
+
+        ImGui::Separator();
+
+        ImGui::TextDisabled(
+            "No scene document is loaded yet.");
+    }
+    else if (panel.id == "properties") {
+        ImGui::TextUnformatted(
+            "Properties");
+
+        ImGui::Separator();
+
+        if (!m_selectedAssetPath.empty()) {
+            ImGui::TextWrapped(
+                "Selected asset: %s",
+                m_selectedAssetPath.c_str());
+        }
+        else {
+            ImGui::TextDisabled(
+                "Nothing selected.");
+        }
+    }
+    else if (panel.id == "console") {
+        ImGui::TextUnformatted(
+            "Studio Console");
+
+        ImGui::Separator();
+
+        ImGui::TextWrapped(
+            "%s",
+            m_status.c_str());
+
+        if (!m_lastError.empty()) {
+            ImGui::Separator();
+
+            ImGui::TextWrapped(
+                "UI: %s",
+                m_lastError.c_str());
+        }
+
+        if (!m_uiRegistry
+                 .GetLastError()
+                 .empty()) {
+
+            ImGui::Separator();
+
+            ImGui::TextWrapped(
+                "UI Registry: %s",
+                m_uiRegistry
+                    .GetLastError()
+                    .c_str());
+        }
+    }
+    else {
+        ImGui::Text(
+            "Panel: %s",
+            panel.id.c_str());
+
+        ImGui::Text(
+            "Layout slot: %s",
+            panel.dock.empty()
+                ? "unspecified"
+                : panel.dock.c_str());
+    }
+
+    ImGui::End();
+}
+
+void StudioApp::DrawDynamicPanels() {
+    for (const UiPanel& panel :
+         m_uiRegistry.GetPanels()) {
+
+        const auto visibility =
+            m_panelVisibility.find(
+                panel.id);
+
+        if (visibility ==
+                m_panelVisibility.end() ||
+            !visibility->second) {
+            continue;
+        }
+
+        if (panel.id == "games") {
+            ApplyPanelLayoutHint(panel);
+            DrawGameLibrary();
+        }
+        else if (panel.id == "projects") {
+            ApplyPanelLayoutHint(panel);
+            DrawProjectLibrary();
+        }
+        else if (panel.id == "assets") {
+            ApplyPanelLayoutHint(panel);
+            DrawAssetBrowser();
+        }
+        else {
+            DrawPlaceholderPanel(panel);
+        }
+    }
+}
 void StudioApp::DrawDynamicMenuBar() {
     if (!ImGui::BeginMainMenuBar()) {
         return;
@@ -1287,11 +1725,10 @@ void StudioApp::DrawDataDrivenWindows() {
 }
 
 void StudioApp::Draw() {
+    ProcessShortcuts();
     DrawDynamicMenuBar();
     DrawDynamicToolbar();
-    DrawGameLibrary();
-    DrawProjectLibrary();
-    DrawAssetBrowser();
+    DrawDynamicPanels();
     DrawCommandPalette();
     DrawDataDrivenWindows();
 }

@@ -24,6 +24,23 @@ struct UiMenu {
     std::vector<UiCommandItem> items;
 };
 
+struct UiPanel {
+    std::string id;
+    std::string title;
+    std::string dock;
+    bool visible = true;
+};
+
+struct UiShortcut {
+    std::string keys;
+    std::string command;
+};
+
+struct UiLayoutSlot {
+    std::string id;
+    std::vector<std::string> panels;
+};
+
 class UiRegistry {
 public:
     explicit UiRegistry(std::filesystem::path runtimeRoot);
@@ -37,6 +54,18 @@ public:
 
     const std::vector<UiCommandItem>& GetToolbarItems() const {
         return m_toolbarItems;
+    }
+
+    const std::vector<UiPanel>& GetPanels() const {
+        return m_panels;
+    }
+
+    const std::vector<UiShortcut>& GetShortcuts() const {
+        return m_shortcuts;
+    }
+
+    const std::vector<UiLayoutSlot>& GetLayoutSlots() const {
+        return m_layoutSlots;
     }
 
     const std::string& GetLastError() const {
@@ -53,6 +82,9 @@ private:
 
     std::vector<UiMenu> m_menus;
     std::vector<UiCommandItem> m_toolbarItems;
+    std::vector<UiPanel> m_panels;
+    std::vector<UiShortcut> m_shortcuts;
+    std::vector<UiLayoutSlot> m_layoutSlots;
 
     std::chrono::steady_clock::time_point m_nextScan {};
 

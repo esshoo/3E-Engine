@@ -1,4 +1,4 @@
-﻿{
+{
   "schemaVersion": 1,
   "renderer": "imgui",
 
@@ -46,8 +46,18 @@
       "items": [
         {
           "type": "command",
-          "label": "Project Explorer",
-          "command": "panel.project.toggle"
+          "label": "Game Library",
+          "command": "panel.games.toggle"
+        },
+        {
+          "type": "command",
+          "label": "Project Library",
+          "command": "panel.projects.toggle"
+        },
+        {
+          "type": "command",
+          "label": "Scene",
+          "command": "panel.scene.toggle"
         },
         {
           "type": "command",
@@ -58,6 +68,11 @@
           "type": "command",
           "label": "Properties",
           "command": "panel.properties.toggle"
+        },
+        {
+          "type": "command",
+          "label": "Asset Browser",
+          "command": "panel.assets.toggle"
         },
         {
           "type": "command",
@@ -97,6 +112,11 @@
           "type": "command",
           "label": "Reload Definitions",
           "command": "studio.reload_definitions"
+        },
+        {
+          "type": "command",
+          "label": "Refresh Asset Index",
+          "command": "asset.refresh"
         }
       ]
     },

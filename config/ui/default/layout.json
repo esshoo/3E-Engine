@@ -1,9 +1,10 @@
-﻿{
+{
   "schemaVersion": 1,
 
   "dockspace": {
     "left": [
-      "project"
+      "games",
+      "projects"
     ],
     "center": [
       "scene"
@@ -13,6 +14,7 @@
       "properties"
     ],
     "bottom": [
+      "assets",
       "console"
     ]
   }

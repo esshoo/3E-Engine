@@ -50,6 +50,7 @@ private:
     std::chrono::steady_clock::time_point m_nextPoll {};
 
     std::unordered_map<std::string, BuiltinCommand> m_builtinHandlers;
+    std::unordered_map<std::string, bool> m_panelVisibility;
 
     std::string m_lastError;
     std::string m_status = "Studio host initialized.";
@@ -65,6 +66,7 @@ private:
 
     unsigned int m_reloadGeneration = 0;
     unsigned int m_commandCount = 0;
+    unsigned int m_lastUiGeneration = 0;
 
     void RegisterBuiltInCommands();
     void ReloadUi(bool force);
@@ -77,6 +79,16 @@ private:
 
     void ExecuteCommand(const std::string& commandId);
     void ExecuteResolvedCommand(const CommandDescriptor& command);
+
+    void SyncPanelVisibility();
+    bool TogglePanelCommand(const std::string& commandId);
+
+    void ProcessShortcuts();
+    bool IsShortcutPressed(const std::string& expression) const;
+
+    void ApplyPanelLayoutHint(const UiPanel& panel) const;
+    void DrawDynamicPanels();
+    void DrawPlaceholderPanel(const UiPanel& panel);
 
     void DrawDynamicMenuBar();
     void DrawDynamicToolbar();

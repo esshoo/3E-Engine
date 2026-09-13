@@ -1,4 +1,4 @@
-﻿{
+{
   "schemaVersion": 1,
 
   "bindings": [
@@ -21,6 +21,14 @@
     {
       "keys": "Ctrl+Y",
       "command": "edit.redo"
+    },
+    {
+      "keys": "Ctrl+Shift+R",
+      "command": "studio.reload_definitions"
+    },
+    {
+      "keys": "Ctrl+Shift+A",
+      "command": "asset.refresh"
     }
   ]
 }
