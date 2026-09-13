@@ -68,6 +68,7 @@ private:
     std::array<char, 256> m_assetSearch {};
 
     bool m_showCommandPalette = false;
+    bool m_exitRequested = false;
 
     void* m_playerProcessHandle = nullptr;
     unsigned long m_playerProcessId = 0;

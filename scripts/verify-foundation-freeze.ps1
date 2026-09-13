@@ -79,6 +79,7 @@ if ($LuaPremake -notmatch 'project\s+"lua"') {
 Write-Host "[OK] Premake host boundaries" -ForegroundColor Green
 Write-Host "[OK] Lua Premake include/project boundary" -ForegroundColor Green
 
+$StudioHeader = Get-Content ".\apps\studio\studio_app.h" -Raw
 $StudioMain = Get-Content ".\apps\studio\main.cpp" -Raw
 $StudioApp = Get-Content ".\apps\studio\studio_app.cpp" -Raw
 $PlayerMain = Get-Content ".\apps\player\main.cpp" -Raw
@@ -100,6 +101,10 @@ if ($StudioApp -notmatch 'ResolvePlayerExecutable' -or
 
 if ($StudioApp -notmatch 'm_builtinHandlers\["studio\.exit"\]') {
     throw "Studio Exit command is not implemented."
+}
+
+if ($StudioHeader -notmatch 'bool\s+m_exitRequested\s*=\s*false\s*;') {
+    throw "Studio exit state member is missing: m_exitRequested."
 }
 
 if ($PlayerMain -notmatch '--game' -or
