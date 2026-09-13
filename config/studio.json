@@ -1,9 +1,10 @@
-﻿{
+{
   "schemaVersion": 1,
   "id": "3e-studio",
   "displayName": "3E Studio",
 
   "gamesDirectory": "games",
+  "projectsDirectory": "../3E-Projects",
   "defaultGameTemplate": "games/_template",
   "defaultUiDirectory": "config/ui/default",
 
@@ -15,7 +16,8 @@
     "watch": [
       "config/**/*.json",
       "games/**/*.json",
-      "games/**/*.lua"
+      "games/**/*.lua",
+      "../3E-Projects/**/*.json"
     ]
   }
 }

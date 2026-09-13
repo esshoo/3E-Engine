@@ -139,16 +139,30 @@ std::filesystem::path FindRuntimeRoot(const char* executablePath) {
 
 StudioApp::StudioApp(std::filesystem::path runtimeRoot)
     : m_runtimeRoot(std::move(runtimeRoot)),
-      m_uiPath(m_runtimeRoot / "config" / "ui" / "default" / "studio.json"),
-      m_gameRegistry(m_runtimeRoot) {
+      m_uiPath(
+          m_runtimeRoot /
+          "config" /
+          "ui" /
+          "default" /
+          "studio.json"),
+      m_gameRegistry(m_runtimeRoot),
+      m_projectRegistry(m_runtimeRoot) {
 
     RegisterBuiltInCommands();
     ReloadUi(true);
+
+    const auto& projects =
+        m_projectRegistry.GetProjects();
+
+    if (projects.size() == 1) {
+        SelectProject(projects.front());
+    }
 }
 
 void StudioApp::RegisterBuiltInCommands() {
     m_commands["test.live_reload"] = [this]() {
         ++m_commandCount;
+
         m_status =
             "test.live_reload executed. Command count: " +
             std::to_string(m_commandCount);
@@ -157,12 +171,20 @@ void StudioApp::RegisterBuiltInCommands() {
     m_commands["studio.reload"] = [this]() {
         ReloadUi(true);
         m_gameRegistry.Update(true);
+        m_projectRegistry.Update(true);
+
         m_status = "Studio data reloaded.";
+    };
+
+    m_commands["project.refresh"] = [this]() {
+        m_projectRegistry.Update(true);
+        m_status = "Project Registry refreshed.";
     };
 }
 
 void StudioApp::Update() {
     m_gameRegistry.Update();
+    m_projectRegistry.Update();
 
     const auto now = std::chrono::steady_clock::now();
 
@@ -178,26 +200,36 @@ void StudioApp::ReloadUi(bool force) {
     std::error_code ec;
 
     if (!std::filesystem::exists(m_uiPath, ec)) {
-        m_lastError = "UI file not found: " + m_uiPath.string();
+        m_lastError =
+            "UI file not found: " +
+            m_uiPath.string();
+
         m_hasLastWrite = false;
         return;
     }
 
-    const auto writeTime = std::filesystem::last_write_time(m_uiPath, ec);
+    const auto writeTime =
+        std::filesystem::last_write_time(m_uiPath, ec);
 
     if (ec) {
-        m_lastError = "Cannot read UI timestamp: " + ec.message();
+        m_lastError =
+            "Cannot read UI timestamp: " +
+            ec.message();
+
         return;
     }
 
-    if (!force && m_hasLastWrite && writeTime == m_lastWrite) {
+    if (!force &&
+        m_hasLastWrite &&
+        writeTime == m_lastWrite) {
         return;
     }
 
     m_lastWrite = writeTime;
     m_hasLastWrite = true;
 
-    data::JsonDocument candidate = data::JsonDocument::LoadFile(m_uiPath);
+    data::JsonDocument candidate =
+        data::JsonDocument::LoadFile(m_uiPath);
 
     if (!candidate.Ok()) {
         m_lastError = candidate.error;
@@ -209,6 +241,7 @@ void StudioApp::ReloadUi(bool force) {
     m_lastError.clear();
 
     ++m_reloadGeneration;
+
     m_status =
         "UI loaded successfully. Reload generation: " +
         std::to_string(m_reloadGeneration);
@@ -225,8 +258,19 @@ void StudioApp::ExecuteCommand(const std::string& commandName) {
     it->second();
 }
 
+void StudioApp::SelectProject(const ProjectDescriptor& project) {
+    m_selectedProjectId = project.id;
+    m_selectedGameId = project.gameId;
+
+    m_status =
+        "Active project: " +
+        project.displayName;
+}
+
 void StudioApp::DrawGameLibrary() {
-    ImGui::SetNextWindowSize(ImVec2(720.0f, 520.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(
+        ImVec2(720.0f, 420.0f),
+        ImGuiCond_FirstUseEver);
 
     if (!ImGui::Begin("3E Studio - Games")) {
         ImGui::End();
@@ -238,8 +282,14 @@ void StudioApp::DrawGameLibrary() {
     ImGui::TextUnformatted("Game Library");
     ImGui::Separator();
 
-    ImGui::Text("Discovered games: %d", static_cast<int>(games.size()));
-    ImGui::TextWrapped("Runtime root: %s", m_runtimeRoot.string().c_str());
+    ImGui::Text(
+        "Discovered games: %d",
+        static_cast<int>(games.size()));
+
+    ImGui::TextWrapped(
+        "Runtime root: %s",
+        m_runtimeRoot.string().c_str());
+
     ImGui::TextWrapped(
         "Games directory: %s",
         m_gameRegistry.GetGamesDirectory().string().c_str());
@@ -247,17 +297,24 @@ void StudioApp::DrawGameLibrary() {
     ImGui::Separator();
 
     if (games.empty()) {
-        ImGui::TextDisabled("No enabled games were discovered.");
+        ImGui::TextDisabled(
+            "No enabled games were discovered.");
     }
 
     for (const GameDescriptor& game : games) {
         ImGui::PushID(game.id.c_str());
 
-        const bool selected = m_selectedGameId == game.id;
+        const bool selected =
+            m_selectedGameId == game.id;
 
-        if (ImGui::Selectable(game.displayName.c_str(), selected)) {
+        if (ImGui::Selectable(
+                game.displayName.c_str(),
+                selected)) {
+
             m_selectedGameId = game.id;
-            m_status = "Selected game: " + game.displayName;
+            m_status =
+                "Selected game: " +
+                game.displayName;
         }
 
         ImGui::SameLine();
@@ -270,41 +327,179 @@ void StudioApp::DrawGameLibrary() {
                     : game.integrationState.c_str();
 
             ImGui::Text("Integration: %s", integration);
-            ImGui::TextWrapped("Game root: %s", game.rootPath.string().c_str());
-            ImGui::TextWrapped("Manifest: %s", game.manifestPath.string().c_str());
+
+            ImGui::TextWrapped(
+                "Game definition root: %s",
+                game.rootPath.string().c_str());
+
+            ImGui::TextWrapped(
+                "Manifest: %s",
+                game.manifestPath.string().c_str());
         }
 
         ImGui::Separator();
         ImGui::PopID();
     }
 
-    const auto& invalidGames = m_gameRegistry.GetInvalidGames();
+    const auto& invalidGames =
+        m_gameRegistry.GetInvalidGames();
 
-    if (!invalidGames.empty() && ImGui::CollapsingHeader("Invalid Game Manifests")) {
+    if (!invalidGames.empty() &&
+        ImGui::CollapsingHeader("Invalid Game Manifests")) {
+
         for (const GameDescriptor& game : invalidGames) {
-            const std::string display = game.displayName.empty()
-                ? game.manifestPath.string()
-                : game.displayName;
+            const std::string display =
+                game.displayName.empty()
+                    ? game.manifestPath.string()
+                    : game.displayName;
 
-            ImGui::BulletText("%s: %s", display.c_str(), game.error.c_str());
+            ImGui::BulletText(
+                "%s: %s",
+                display.c_str(),
+                game.error.c_str());
         }
     }
 
     if (!m_gameRegistry.GetLastError().empty()) {
         ImGui::Separator();
-        ImGui::TextWrapped("Game Registry: %s", m_gameRegistry.GetLastError().c_str());
+
+        ImGui::TextWrapped(
+            "Game Registry: %s",
+            m_gameRegistry.GetLastError().c_str());
     }
 
-    if (!m_lastError.empty()) {
+    ImGui::End();
+}
+
+void StudioApp::DrawProjectLibrary() {
+    ImGui::SetNextWindowSize(
+        ImVec2(760.0f, 520.0f),
+        ImGuiCond_FirstUseEver);
+
+    if (!ImGui::Begin("3E Studio - Projects")) {
+        ImGui::End();
+        return;
+    }
+
+    const auto& projects =
+        m_projectRegistry.GetProjects();
+
+    ImGui::TextUnformatted("Project Library");
+    ImGui::Separator();
+
+    ImGui::Text(
+        "Discovered projects: %d",
+        static_cast<int>(projects.size()));
+
+    ImGui::TextWrapped(
+        "Projects directory: %s",
+        m_projectRegistry.GetProjectsDirectory().string().c_str());
+
+    ImGui::Separator();
+
+    if (projects.empty()) {
+        ImGui::TextDisabled(
+            "No valid 3E projects were discovered.");
+    }
+
+    for (const ProjectDescriptor& project : projects) {
+        ImGui::PushID(project.id.c_str());
+
+        const bool selected =
+            m_selectedProjectId == project.id;
+
+        if (ImGui::Selectable(
+                project.displayName.c_str(),
+                selected)) {
+
+            SelectProject(project);
+        }
+
+        ImGui::SameLine();
+
+        ImGui::TextDisabled(
+            "[%s -> %s]",
+            project.id.c_str(),
+            project.gameId.c_str());
+
+        if (selected) {
+            ImGui::TextUnformatted("ACTIVE PROJECT");
+
+            ImGui::TextWrapped(
+                "Project root: %s",
+                project.projectRoot.string().c_str());
+
+            ImGui::TextWrapped(
+                "Manifest: %s",
+                project.manifestPath.string().c_str());
+
+            ImGui::Separator();
+
+            ImGui::TextWrapped(
+                "Game root (READ ONLY): %s",
+                project.gameRoot.string().c_str());
+
+            ImGui::TextWrapped(
+                "ExportedAssets (READ ONLY): %s",
+                project.exportedAssets.string().c_str());
+
+            ImGui::Separator();
+
+            ImGui::TextWrapped(
+                "Overlay: %s",
+                project.overlayPath.string().c_str());
+
+            ImGui::TextWrapped(
+                "Cache: %s",
+                project.cachePath.string().c_str());
+
+            ImGui::TextWrapped(
+                "Temp: %s",
+                project.tempPath.string().c_str());
+
+            if (!project.sourceReadOnly) {
+                ImGui::Separator();
+                ImGui::TextDisabled(
+                    "WARNING: source.readOnly is false.");
+            }
+        }
+
         ImGui::Separator();
-        ImGui::TextWrapped("UI JSON: %s", m_lastError.c_str());
+        ImGui::PopID();
+    }
+
+    const auto& invalidProjects =
+        m_projectRegistry.GetInvalidProjects();
+
+    if (!invalidProjects.empty() &&
+        ImGui::CollapsingHeader("Invalid Projects")) {
+
+        for (const ProjectDescriptor& project : invalidProjects) {
+            const std::string display =
+                project.displayName.empty()
+                    ? project.manifestPath.string()
+                    : project.displayName;
+
+            ImGui::BulletText(
+                "%s: %s",
+                display.c_str(),
+                project.error.c_str());
+        }
+    }
+
+    if (!m_projectRegistry.GetLastError().empty()) {
+        ImGui::Separator();
+
+        ImGui::TextWrapped(
+            "Project Registry: %s",
+            m_projectRegistry.GetLastError().c_str());
     }
 
     ImGui::Separator();
 
-    if (ImGui::Button("Refresh Games")) {
-        m_gameRegistry.Update(true);
-        m_status = "Game Registry refreshed.";
+    if (ImGui::Button("Refresh Projects")) {
+        m_projectRegistry.Update(true);
+        m_status = "Project Registry refreshed.";
     }
 
     ImGui::SameLine();
@@ -348,8 +543,11 @@ void StudioApp::DrawItem(const data::JsonValue& item) {
     }
 
     if (type == "button") {
-        const std::string label = item.GetString("label", "Button");
-        const std::string command = item.GetString("command");
+        const std::string label =
+            item.GetString("label", "Button");
+
+        const std::string command =
+            item.GetString("command");
 
         if (ImGui::Button(label.c_str())) {
             ExecuteCommand(command);
@@ -364,11 +562,13 @@ void StudioApp::DrawItem(const data::JsonValue& item) {
 }
 
 void StudioApp::DrawDataDrivenWindows() {
-    if (!m_hasValidUi || !m_uiDocument.root.IsObject()) {
+    if (!m_hasValidUi ||
+        !m_uiDocument.root.IsObject()) {
         return;
     }
 
-    const data::JsonValue* windows = m_uiDocument.root.Find("windows");
+    const data::JsonValue* windows =
+        m_uiDocument.root.Find("windows");
 
     if (!windows || !windows->IsArray()) {
         return;
@@ -379,12 +579,16 @@ void StudioApp::DrawDataDrivenWindows() {
             continue;
         }
 
-        const std::string title = window.GetString("title", "Untitled");
+        const std::string title =
+            window.GetString("title", "Untitled");
 
-        ImGui::SetNextWindowSize(ImVec2(500.0f, 260.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(
+            ImVec2(500.0f, 260.0f),
+            ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin(title.c_str())) {
-            const data::JsonValue* items = window.Find("items");
+            const data::JsonValue* items =
+                window.Find("items");
 
             if (items && items->IsArray()) {
                 for (const data::JsonValue& item : items->arrayValue) {
@@ -399,6 +603,7 @@ void StudioApp::DrawDataDrivenWindows() {
 
 void StudioApp::Draw() {
     DrawGameLibrary();
+    DrawProjectLibrary();
     DrawDataDrivenWindows();
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apps/studio/game_registry.h"
+#include "apps/studio/project_registry.h"
 #include "engine/data/json_value.h"
 
 #include <chrono>
@@ -29,6 +30,7 @@ private:
     std::filesystem::path m_uiPath;
 
     GameRegistry m_gameRegistry;
+    ProjectRegistry m_projectRegistry;
 
     data::JsonDocument m_uiDocument;
 
@@ -42,7 +44,9 @@ private:
 
     std::string m_lastError;
     std::string m_status = "Studio host initialized.";
+
     std::string m_selectedGameId;
+    std::string m_selectedProjectId;
 
     unsigned int m_reloadGeneration = 0;
     unsigned int m_commandCount = 0;
@@ -51,7 +55,10 @@ private:
     void ReloadUi(bool force);
     void ExecuteCommand(const std::string& commandName);
 
+    void SelectProject(const ProjectDescriptor& project);
+
     void DrawGameLibrary();
+    void DrawProjectLibrary();
     void DrawDataDrivenWindows();
     void DrawItem(const data::JsonValue& item);
 };
