@@ -1,4 +1,5 @@
 #include "apps/studio/action_executor.h"
+#include "engine/scripting/lua_runtime.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -684,6 +685,66 @@ ActionResult ActionExecutor::ExecuteAction(
             destination.string());
     }
 
+    if (type == "script") {
+        const std::filesystem::path scriptPath =
+            ResolvePath(
+                action.GetString("path"),
+                context);
+
+        if (scriptPath.empty()) {
+            return Failure(
+                "script action requires path.");
+        }
+
+        threee::scripting::ScriptContext scriptContext;
+
+        scriptContext.values["RuntimeRoot"] =
+            context.runtimeRoot.string();
+
+        scriptContext.values["ActiveGame"] =
+            context.activeGameId;
+
+        scriptContext.values["ActiveProject"] =
+            context.activeProjectId;
+
+        if (context.project) {
+            scriptContext.values["ProjectRoot"] =
+                context.project->projectRoot.string();
+
+            scriptContext.values["GameRoot"] =
+                context.project->gameRoot.string();
+
+            scriptContext.values["ExportedAssets"] =
+                context.project->exportedAssets.string();
+
+            scriptContext.values["Overlay"] =
+                context.project->overlayPath.string();
+
+            scriptContext.values["Cache"] =
+                context.project->cachePath.string();
+
+            scriptContext.values["Temp"] =
+                context.project->tempPath.string();
+        }
+
+        threee::scripting::LuaRuntime runtime;
+
+        const auto scriptResult =
+            runtime.ExecuteFile(
+                scriptPath,
+                action.GetString(
+                    "function",
+                    "main"),
+                scriptContext);
+
+        if (!scriptResult.success) {
+            return Failure(
+                scriptResult.message);
+        }
+
+        return Success(
+            scriptResult.message);
+    }
     return Failure(
         "Unsupported action type: " +
         type);

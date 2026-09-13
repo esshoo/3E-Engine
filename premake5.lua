@@ -11,6 +11,7 @@ workspace "rechan"
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 include "vendor/libp3d"
+include "vendor/lua"
 
 -- rechan
 project "rechan"
@@ -147,6 +148,8 @@ project "3E-Studio"
         "apps/studio/**.cpp",
         "engine/data/**.h",
         "engine/data/**.cpp",
+        "engine/scripting/**.h",
+        "engine/scripting/**.cpp",
     }
 
     includedirs {
@@ -154,10 +157,12 @@ project "3E-Studio"
         "engine",
         "vendor/libp3d",
         "vendor/libp3d/vendor/imgui",
+        "vendor/lua/src",
     }
 
     links {
         "libp3d",
+        "lua",
     }
 
     defines {

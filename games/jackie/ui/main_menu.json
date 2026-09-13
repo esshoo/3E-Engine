@@ -34,6 +34,11 @@
           "command": "jackie.validate_sources"
         },
         {
+          "type": "command",
+          "label": "Lua: Project Context",
+          "command": "jackie.lua.project_summary"
+        },
+        {
           "type": "separator"
         },
         {

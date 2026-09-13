@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    {
+      "id": "jackie.lua.project_summary",
+      "action": {
+        "type": "script",
+        "path": "${RuntimeRoot}/games/jackie/scripts/project_summary.lua",
+        "function": "main"
+      }
+    }
+  ]
+}
