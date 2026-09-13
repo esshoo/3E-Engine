@@ -1,6 +1,7 @@
 #include "apps/studio/game_registry.h"
 #include "apps/studio/project_registry.h"
 #include "apps/studio/studio_app.h"
+#include "engine/runtime/runtime_root.h"
 
 #include "p3d/context.h"
 #include "pddi/pddi.h"
@@ -105,7 +106,7 @@ int VerifyRuntimeData(
 
 int main(int argc, char** argv) {
     const std::filesystem::path runtimeRoot =
-        threee::studio::FindRuntimeRoot(
+        threee::runtime::FindRuntimeRoot(
             argv && argv[0] ? argv[0] : nullptr);
 
     if (argc >= 2 &&
@@ -138,7 +139,7 @@ int main(int argc, char** argv) {
     p3d::display->AddOverlayCallback(DrawStudioOverlay);
     p3d::context->SetClearColour(pddiColour(22, 23, 27));
 
-    while (!p3d::display->ShouldClose()) {
+    while (!p3d::display->ShouldClose() && !studio.ShouldExit()) {
         p3d::display->PollEvents();
 
         studio.Update();

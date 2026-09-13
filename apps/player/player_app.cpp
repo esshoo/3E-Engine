@@ -183,6 +183,27 @@ bool PlayerRuntimeState::Load(
                     "workspace",
                     "overlay"));
 
+        if (sourceGameRoot.empty()) {
+            error =
+                "Project is missing source.gameRoot.";
+
+            return false;
+        }
+
+        if (exportedAssets.empty()) {
+            error =
+                "Project is missing source.exportedAssets.";
+
+            return false;
+        }
+
+        if (overlayPath.empty()) {
+            error =
+                "Project is missing workspace.overlay.";
+
+            return false;
+        }
+
         if (!sourceGameRoot.empty() &&
             !Exists(sourceGameRoot)) {
 
@@ -199,6 +220,16 @@ bool PlayerRuntimeState::Load(
             error =
                 "Project ExportedAssets not found: " +
                 exportedAssets.string();
+
+            return false;
+        }
+
+        if (!overlayPath.empty() &&
+            !Exists(overlayPath)) {
+
+            error =
+                "Project Overlay not found: " +
+                overlayPath.string();
 
             return false;
         }

@@ -29,6 +29,10 @@ public:
         return m_runtimeRoot;
     }
 
+    bool ShouldExit() const {
+        return m_exitRequested;
+    }
+
 private:
     using BuiltinCommand = std::function<void()>;
 
@@ -81,6 +85,7 @@ private:
     const ProjectDescriptor* FindActiveProject() const;
     ActionContext BuildActionContext() const;
 
+    std::filesystem::path ResolvePlayerExecutable() const;
     void LaunchPlayer();
     void StopPlayer();
     void PollPlayerProcess();
@@ -109,6 +114,5 @@ private:
     void DrawItem(const data::JsonValue& item);
 };
 
-std::filesystem::path FindRuntimeRoot(const char* executablePath);
 
 } // namespace threee::studio

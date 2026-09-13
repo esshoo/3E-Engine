@@ -18,130 +18,6 @@
 
 namespace threee::studio {
 
-namespace {
-
-bool LooksLikeRuntimeRoot(const std::filesystem::path& path) {
-    std::error_code ec;
-
-    const bool hasStudioConfig =
-        std::filesystem::exists(path / "config" / "studio.json", ec);
-
-    ec.clear();
-
-    const bool hasDefaultUi =
-        std::filesystem::exists(
-            path / "config" / "ui" / "default" / "studio.json",
-            ec);
-
-    return hasStudioConfig || hasDefaultUi;
-}
-
-bool LooksLikeSourceRoot(const std::filesystem::path& path) {
-    std::error_code ec;
-
-    return
-        std::filesystem::exists(path / "premake5.lua", ec) &&
-        std::filesystem::exists(path / "vendor" / "libp3d", ec);
-}
-
-std::filesystem::path SearchUpwardForSourceRoot(std::filesystem::path path) {
-    std::error_code ec;
-    path = std::filesystem::weakly_canonical(path, ec);
-
-    if (ec) {
-        ec.clear();
-        path = std::filesystem::absolute(path, ec);
-    }
-
-    for (int depth = 0; depth < 10 && !path.empty(); ++depth) {
-        if (LooksLikeRuntimeRoot(path) || LooksLikeSourceRoot(path)) {
-            return path;
-        }
-
-        const std::filesystem::path parent = path.parent_path();
-
-        if (parent == path) {
-            break;
-        }
-
-        path = parent;
-    }
-
-    return {};
-}
-
-std::filesystem::path GetExecutableDirectory(const char* executablePath) {
-#if defined(_WIN32)
-    std::vector<wchar_t> buffer(32768, L'\0');
-
-    const DWORD length =
-        GetModuleFileNameW(
-            nullptr,
-            buffer.data(),
-            static_cast<DWORD>(buffer.size()));
-
-    if (length > 0 && length < static_cast<DWORD>(buffer.size())) {
-        return
-            std::filesystem::path(std::wstring(buffer.data(), length))
-                .parent_path();
-    }
-#endif
-
-    std::error_code ec;
-
-    if (executablePath && executablePath[0]) {
-        std::filesystem::path executable(executablePath);
-
-        if (executable.is_relative()) {
-            executable = std::filesystem::absolute(executable, ec);
-        }
-
-        if (!ec) {
-            return executable.parent_path();
-        }
-    }
-
-    return {};
-}
-
-} // namespace
-
-std::filesystem::path FindRuntimeRoot(const char* executablePath) {
-    std::error_code ec;
-
-    const std::filesystem::path executableDirectory =
-        GetExecutableDirectory(executablePath);
-
-    if (!executableDirectory.empty() && LooksLikeRuntimeRoot(executableDirectory)) {
-        return executableDirectory;
-    }
-
-    const std::filesystem::path currentDirectory =
-        std::filesystem::current_path(ec);
-
-    if (!ec && LooksLikeRuntimeRoot(currentDirectory)) {
-        return currentDirectory;
-    }
-
-    if (!currentDirectory.empty()) {
-        if (const auto sourceRoot = SearchUpwardForSourceRoot(currentDirectory);
-            !sourceRoot.empty()) {
-            return sourceRoot;
-        }
-    }
-
-    if (!executableDirectory.empty()) {
-        if (const auto sourceRoot = SearchUpwardForSourceRoot(executableDirectory);
-            !sourceRoot.empty()) {
-            return sourceRoot;
-        }
-
-        return executableDirectory;
-    }
-
-    return currentDirectory;
-}
-
 StudioApp::StudioApp(std::filesystem::path runtimeRoot)
     : m_runtimeRoot(std::move(runtimeRoot)),
       m_uiPath(
@@ -219,6 +95,10 @@ void StudioApp::RegisterBuiltInCommands() {
         m_status = "Redo is registered; editor transaction stack is not active yet.";
     };
 
+    m_builtinHandlers["studio.exit"] = [this]() {
+        m_exitRequested = true;
+        m_status = "Exit requested.";
+    };
     m_builtinHandlers["studio.about"] = [this]() {
         m_status = "3E Studio - data-driven reverse-engineering workspace.";
     };
@@ -393,6 +273,42 @@ ActionContext StudioApp::BuildActionContext() const {
     return context;
 }
 
+std::filesystem::path StudioApp::ResolvePlayerExecutable() const {
+#if defined(_WIN32)
+    std::filesystem::path configured =
+        "3E-Player.exe";
+#else
+    std::filesystem::path configured =
+        "3E-Player";
+#endif
+
+    const data::JsonDocument config =
+        data::JsonDocument::LoadFile(
+            m_runtimeRoot /
+            "config" /
+            "studio.json");
+
+    if (config.Ok() &&
+        config.root.IsObject()) {
+
+        const std::string value =
+            config.root.GetString(
+                "playerExecutable");
+
+        if (!value.empty()) {
+            configured =
+                std::filesystem::path(value);
+        }
+    }
+
+    if (configured.is_absolute()) {
+        return configured.lexically_normal();
+    }
+
+    return
+        (m_runtimeRoot / configured)
+            .lexically_normal();
+}
 void StudioApp::LaunchPlayer() {
     const ProjectDescriptor* project =
         FindActiveProject();
@@ -415,8 +331,7 @@ void StudioApp::LaunchPlayer() {
     }
 
     const std::filesystem::path playerPath =
-        m_runtimeRoot /
-        "3E-Player.exe";
+        ResolvePlayerExecutable();
 
     std::error_code ec;
 
@@ -505,8 +420,7 @@ void StudioApp::LaunchPlayer() {
             m_playerProcessId);
 #else
     const std::filesystem::path playerPath =
-        m_runtimeRoot /
-        "3E-Player";
+        ResolvePlayerExecutable();
 
     const std::string command =
         "\"" +

@@ -1,4 +1,4 @@
-name: Build 3E Studio (On Demand)
+name: Build 3E Host (On Demand)
 
 on:
   workflow_dispatch:
@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  build-studio:
-    name: 3E-Studio ${{ inputs.configuration }} x64
+  build-host:
+    name: 3E Host ${{ inputs.configuration }} x64
     runs-on: windows-2025-vs2026
 
     steps:
@@ -36,10 +36,13 @@ jobs:
         run: |
           Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
           Write-Host "Workspace: $env:GITHUB_WORKSPACE"
+
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
           if (-not (Test-Path $vswhere)) {
             throw "vswhere.exe not found on runner."
           }
+
           & $vswhere -latest -products * -property displayName
           & $vswhere -latest -products * -property catalog_productDisplayVersion
 
@@ -79,7 +82,7 @@ jobs:
 
           & ".\.tools\premake5.exe" --version
 
-      - name: Generate Visual Studio 2026 project
+      - name: Generate Visual Studio 2026 projects
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -90,8 +93,13 @@ jobs:
             throw "Premake generation failed with exit code $LASTEXITCODE."
           }
 
-          if (-not (Test-Path ".\build\3E-Studio.vcxproj")) {
-            throw "build\3E-Studio.vcxproj was not generated."
+          foreach ($project in @(
+            ".\build\3E-Studio.vcxproj",
+            ".\build\3E-Player.vcxproj"
+          )) {
+            if (-not (Test-Path $project)) {
+              throw "Premake did not generate: $project"
+            }
           }
 
       - name: Locate MSBuild
@@ -128,7 +136,7 @@ jobs:
           Write-Host "MSBuild: $msbuild"
           "path=$msbuild" >> $env:GITHUB_OUTPUT
 
-      - name: Build 3E-Studio only
+      - name: Build 3E-Studio
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -144,55 +152,125 @@ jobs:
             throw "3E-Studio build failed with exit code $LASTEXITCODE."
           }
 
-          if (-not (Test-Path ".\bin\3E-Studio.exe")) {
-            throw "Build completed but bin\3E-Studio.exe was not found."
-          }
-
-      - name: Verify data-driven files
-        shell: pwsh
-        run: |
-          $required = @(
-            ".\bin\3E-Studio.exe",
-            ".\config\ui\default\studio.json"
-          )
-
-          foreach ($path in $required) {
-            if (-not (Test-Path $path)) {
-              throw "Missing required artifact file: $path"
-            }
-          }
-
-      - name: Prepare portable artifact
+      - name: Build 3E-Player
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
-          New-Item -ItemType Directory -Force -Path ".artifact\3E-Studio" | Out-Null
+          & "${{ steps.msbuild.outputs.path }}" `
+            ".\build\3E-Player.vcxproj" `
+            /m `
+            /nologo `
+            /p:Configuration="${{ inputs.configuration }}" `
+            /p:Platform=x64
 
-          Copy-Item ".\bin\3E-Studio.exe" ".artifact\3E-Studio\3E-Studio.exe"
+          if ($LASTEXITCODE -ne 0) {
+            throw "3E-Player build failed with exit code $LASTEXITCODE."
+          }
 
-          foreach ($dir in @("config", "games", "schemas", "scripts", "pipelines")) {
-            if (Test-Path ".\$dir") {
-              Copy-Item ".\$dir" ".artifact\3E-Studio\$dir" -Recurse
+      - name: Verify built host and data definitions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          foreach ($path in @(
+            ".\bin\3E-Studio.exe",
+            ".\bin\3E-Player.exe",
+            ".\config\studio.json",
+            ".\config\ui\default\studio.json",
+            ".\games\jackie\game.json"
+          )) {
+            if (-not (Test-Path $path)) {
+              throw "Missing required host file: $path"
             }
           }
 
+          Get-Content ".\config\studio.json" -Raw | ConvertFrom-Json | Out-Null
+          Get-Content ".\games\jackie\game.json" -Raw | ConvertFrom-Json | Out-Null
+
+      - name: Verify universal 3E-Player runtime bootstrap
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Push-Location $env:GITHUB_WORKSPACE
+
+          try {
+            & ".\bin\3E-Player.exe" `
+              --game jackie `
+              --verify-runtime
+
+            if ($LASTEXITCODE -ne 0) {
+              if (Test-Path ".\3E-Player-Verify.txt") {
+                Get-Content ".\3E-Player-Verify.txt"
+              }
+
+              throw "3E-Player runtime verification failed with exit code $LASTEXITCODE."
+            }
+
+            if (-not (Test-Path ".\3E-Player-Verify.txt")) {
+              throw "3E-Player verification report was not produced."
+            }
+
+            Get-Content ".\3E-Player-Verify.txt"
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Prepare portable Studio + Player artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          & ".\scripts\package-3e-host.ps1" `
+            -Root $env:GITHUB_WORKSPACE `
+            -Output ".artifact\3E-Studio"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Host packaging script failed with exit code $LASTEXITCODE."
+          }
+
+          if (Test-Path ".\3E-Player-Verify.txt") {
+            Copy-Item `
+              ".\3E-Player-Verify.txt" `
+              ".\.artifact\3E-Studio\3E-Player-Verify.txt" `
+              -Force
+          }
+
           @"
-          3E-Studio build produced by GitHub Actions.
+
+          GitHub Actions build metadata
 
           Source ref:
             ${{ inputs.ref }}
 
-          Host build:
+          Source commit:
+            $env:GITHUB_SHA
+
+          Configuration:
             ${{ inputs.configuration }} x64
 
+          Native hosts:
+            3E-Studio.exe
+            3E-Player.exe
+
           Daily workflow:
-            Edit JSON / schemas / scripts -> no host rebuild.
+            Edit JSON / schemas / Lua scripts -> no host rebuild.
+          "@ | Add-Content ".\.artifact\3E-Studio\BUILD-INFO.txt" -Encoding UTF8
 
-          Re-run this workflow only when native C++ host/module changes require compilation.
-          "@ | Set-Content ".artifact\3E-Studio\BUILD-INFO.txt" -Encoding UTF8
+          foreach ($path in @(
+            ".\.artifact\3E-Studio\3E-Studio.exe",
+            ".\.artifact\3E-Studio\3E-Player.exe",
+            ".\.artifact\3E-Studio\config",
+            ".\.artifact\3E-Studio\games"
+          )) {
+            if (-not (Test-Path $path)) {
+              throw "Portable artifact is incomplete: $path"
+            }
+          }
 
-      - name: Upload 3E-Studio artifact
+      - name: Upload 3E host artifact
         uses: actions/upload-artifact@v4
         with:
           name: 3E-Studio-${{ inputs.configuration }}-x64
