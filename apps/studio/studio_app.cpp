@@ -146,7 +146,9 @@ StudioApp::StudioApp(std::filesystem::path runtimeRoot)
           "default" /
           "studio.json"),
       m_gameRegistry(m_runtimeRoot),
-      m_projectRegistry(m_runtimeRoot) {
+      m_projectRegistry(m_runtimeRoot),
+      m_commandRegistry(m_runtimeRoot),
+      m_uiRegistry(m_runtimeRoot) {
 
     RegisterBuiltInCommands();
     ReloadUi(true);
@@ -160,7 +162,46 @@ StudioApp::StudioApp(std::filesystem::path runtimeRoot)
 }
 
 void StudioApp::RegisterBuiltInCommands() {
-    m_commands["test.live_reload"] = [this]() {
+    m_builtinHandlers["studio.command_palette"] = [this]() {
+        m_showCommandPalette = true;
+        m_status = "Command Palette opened.";
+    };
+
+    m_builtinHandlers["studio.reload_definitions"] = [this]() {
+        ReloadUi(true);
+        m_gameRegistry.Update(true);
+        m_projectRegistry.Update(true);
+        m_commandRegistry.Update(true);
+        m_uiRegistry.Update(true);
+
+        m_status = "All Studio definitions reloaded.";
+    };
+
+    m_builtinHandlers["project.open"] = [this]() {
+        m_status = "Select a project from Project Library.";
+    };
+
+    m_builtinHandlers["game.play"] = [this]() {
+        m_status = "Play command is registered; runtime launch comes in a later foundation stage.";
+    };
+
+    m_builtinHandlers["game.stop"] = [this]() {
+        m_status = "Stop command is registered.";
+    };
+
+    m_builtinHandlers["edit.undo"] = [this]() {
+        m_status = "Undo is registered; editor transaction stack is not active yet.";
+    };
+
+    m_builtinHandlers["edit.redo"] = [this]() {
+        m_status = "Redo is registered; editor transaction stack is not active yet.";
+    };
+
+    m_builtinHandlers["studio.about"] = [this]() {
+        m_status = "3E Studio - data-driven reverse-engineering workspace.";
+    };
+
+    m_builtinHandlers["test.live_reload"] = [this]() {
         ++m_commandCount;
 
         m_status =
@@ -168,31 +209,62 @@ void StudioApp::RegisterBuiltInCommands() {
             std::to_string(m_commandCount);
     };
 
-    m_commands["studio.reload"] = [this]() {
+    m_builtinHandlers["studio.reload"] = [this]() {
         ReloadUi(true);
         m_gameRegistry.Update(true);
         m_projectRegistry.Update(true);
+        m_commandRegistry.Update(true);
+        m_uiRegistry.Update(true);
 
         m_status = "Studio data reloaded.";
     };
 
-    m_commands["project.refresh"] = [this]() {
+    m_builtinHandlers["project.refresh"] = [this]() {
         m_projectRegistry.Update(true);
         m_status = "Project Registry refreshed.";
     };
 }
 
+void StudioApp::SetActiveGame(
+    const std::string& gameId) {
+
+    if (m_selectedGameId == gameId) {
+        return;
+    }
+
+    m_selectedGameId = gameId;
+
+    m_commandRegistry.SetActiveGame(gameId);
+    m_uiRegistry.SetActiveGame(gameId);
+}
+
+void StudioApp::SelectProject(
+    const ProjectDescriptor& project) {
+
+    m_selectedProjectId = project.id;
+    SetActiveGame(project.gameId);
+
+    m_status =
+        "Active project: " +
+        project.displayName;
+}
+
 void StudioApp::Update() {
     m_gameRegistry.Update();
     m_projectRegistry.Update();
+    m_commandRegistry.Update();
+    m_uiRegistry.Update();
 
-    const auto now = std::chrono::steady_clock::now();
+    const auto now =
+        std::chrono::steady_clock::now();
 
     if (now < m_nextPoll) {
         return;
     }
 
-    m_nextPoll = now + std::chrono::milliseconds(250);
+    m_nextPoll =
+        now + std::chrono::milliseconds(250);
+
     ReloadUi(false);
 }
 
@@ -209,7 +281,9 @@ void StudioApp::ReloadUi(bool force) {
     }
 
     const auto writeTime =
-        std::filesystem::last_write_time(m_uiPath, ec);
+        std::filesystem::last_write_time(
+            m_uiPath,
+            ec);
 
     if (ec) {
         m_lastError =
@@ -247,24 +321,225 @@ void StudioApp::ReloadUi(bool force) {
         std::to_string(m_reloadGeneration);
 }
 
-void StudioApp::ExecuteCommand(const std::string& commandName) {
-    const auto it = m_commands.find(commandName);
+void StudioApp::ExecuteResolvedCommand(
+    const CommandDescriptor& command) {
 
-    if (it == m_commands.end()) {
-        m_status = "Unknown command: " + commandName;
+    if (command.actionType == "builtin") {
+        const std::string handler =
+            command.handler.empty()
+                ? command.id
+                : command.handler;
+
+        const auto builtin =
+            m_builtinHandlers.find(handler);
+
+        if (builtin == m_builtinHandlers.end()) {
+            m_status =
+                "Builtin handler not implemented yet: " +
+                handler;
+            return;
+        }
+
+        builtin->second();
         return;
     }
 
-    it->second();
-}
+    if (command.actionType == "game") {
+        m_status =
+            "Game command resolved: " +
+            command.id +
+            " -> " +
+            command.handler;
 
-void StudioApp::SelectProject(const ProjectDescriptor& project) {
-    m_selectedProjectId = project.id;
-    m_selectedGameId = project.gameId;
+        return;
+    }
 
     m_status =
-        "Active project: " +
-        project.displayName;
+        "Command action type registered but not executable yet: " +
+        command.actionType;
+}
+
+void StudioApp::ExecuteCommand(
+    const std::string& commandId) {
+
+    if (commandId.empty()) {
+        return;
+    }
+
+    const CommandDescriptor* command =
+        m_commandRegistry.Find(commandId);
+
+    if (command) {
+        ExecuteResolvedCommand(*command);
+        return;
+    }
+
+    // Allow direct host handlers for lightweight UI commands that
+    // have not been declared in a command JSON file yet.
+    const auto direct =
+        m_builtinHandlers.find(commandId);
+
+    if (direct != m_builtinHandlers.end()) {
+        direct->second();
+        return;
+    }
+
+    m_status =
+        "Unknown command: " +
+        commandId;
+}
+
+void StudioApp::DrawDynamicMenuBar() {
+    if (!ImGui::BeginMainMenuBar()) {
+        return;
+    }
+
+    for (const UiMenu& menu :
+         m_uiRegistry.GetMenus()) {
+
+        const std::string label =
+            menu.label.empty()
+                ? menu.id
+                : menu.label;
+
+        if (!ImGui::BeginMenu(label.c_str())) {
+            continue;
+        }
+
+        for (const UiCommandItem& item :
+             menu.items) {
+
+            if (item.type == "separator") {
+                ImGui::Separator();
+                continue;
+            }
+
+            if (item.type != "command") {
+                continue;
+            }
+
+            const std::string itemLabel =
+                item.label.empty()
+                    ? item.command
+                    : item.label;
+
+            if (ImGui::MenuItem(itemLabel.c_str())) {
+                ExecuteCommand(item.command);
+            }
+        }
+
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMainMenuBar();
+}
+
+void StudioApp::DrawDynamicToolbar() {
+    ImGui::SetNextWindowSize(
+        ImVec2(700.0f, 70.0f),
+        ImGuiCond_FirstUseEver);
+
+    if (!ImGui::Begin("3E Studio - Toolbar")) {
+        ImGui::End();
+        return;
+    }
+
+    bool first = true;
+
+    for (const UiCommandItem& item :
+         m_uiRegistry.GetToolbarItems()) {
+
+        if (item.type == "separator") {
+            if (!first) {
+                ImGui::SameLine();
+            }
+
+            ImGui::TextDisabled("|");
+            first = false;
+            continue;
+        }
+
+        if (item.type != "command") {
+            continue;
+        }
+
+        if (!first) {
+            ImGui::SameLine();
+        }
+
+        const std::string label =
+            item.label.empty()
+                ? item.command
+                : item.label;
+
+        if (ImGui::Button(label.c_str())) {
+            ExecuteCommand(item.command);
+        }
+
+        first = false;
+    }
+
+    ImGui::End();
+}
+
+void StudioApp::DrawCommandPalette() {
+    if (!m_showCommandPalette) {
+        return;
+    }
+
+    ImGui::SetNextWindowSize(
+        ImVec2(620.0f, 500.0f),
+        ImGuiCond_Appearing);
+
+    if (!ImGui::Begin(
+            "3E Studio - Command Palette",
+            &m_showCommandPalette)) {
+
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Text(
+        "Commands: %d",
+        static_cast<int>(
+            m_commandRegistry
+                .GetCommands()
+                .size()));
+
+    ImGui::Separator();
+
+    for (const CommandDescriptor& command :
+         m_commandRegistry.GetCommands()) {
+
+        if (ImGui::Selectable(
+                command.id.c_str())) {
+
+            ExecuteResolvedCommand(command);
+            m_showCommandPalette = false;
+        }
+
+        ImGui::SameLine();
+
+        ImGui::TextDisabled(
+            "[%s -> %s]",
+            command.actionType.c_str(),
+            command.handler.c_str());
+    }
+
+    if (!m_commandRegistry
+             .GetLastError()
+             .empty()) {
+
+        ImGui::Separator();
+
+        ImGui::TextWrapped(
+            "Command Registry: %s",
+            m_commandRegistry
+                .GetLastError()
+                .c_str());
+    }
+
+    ImGui::End();
 }
 
 void StudioApp::DrawGameLibrary() {
@@ -277,7 +552,8 @@ void StudioApp::DrawGameLibrary() {
         return;
     }
 
-    const auto& games = m_gameRegistry.GetGames();
+    const auto& games =
+        m_gameRegistry.GetGames();
 
     ImGui::TextUnformatted("Game Library");
     ImGui::Separator();
@@ -292,7 +568,10 @@ void StudioApp::DrawGameLibrary() {
 
     ImGui::TextWrapped(
         "Games directory: %s",
-        m_gameRegistry.GetGamesDirectory().string().c_str());
+        m_gameRegistry
+            .GetGamesDirectory()
+            .string()
+            .c_str());
 
     ImGui::Separator();
 
@@ -311,14 +590,18 @@ void StudioApp::DrawGameLibrary() {
                 game.displayName.c_str(),
                 selected)) {
 
-            m_selectedGameId = game.id;
+            SetActiveGame(game.id);
+
             m_status =
                 "Selected game: " +
                 game.displayName;
         }
 
         ImGui::SameLine();
-        ImGui::TextDisabled("[%s]", game.id.c_str());
+
+        ImGui::TextDisabled(
+            "[%s]",
+            game.id.c_str());
 
         if (selected) {
             const char* integration =
@@ -326,7 +609,9 @@ void StudioApp::DrawGameLibrary() {
                     ? "unspecified"
                     : game.integrationState.c_str();
 
-            ImGui::Text("Integration: %s", integration);
+            ImGui::Text(
+                "Integration: %s",
+                integration);
 
             ImGui::TextWrapped(
                 "Game definition root: %s",
@@ -345,9 +630,12 @@ void StudioApp::DrawGameLibrary() {
         m_gameRegistry.GetInvalidGames();
 
     if (!invalidGames.empty() &&
-        ImGui::CollapsingHeader("Invalid Game Manifests")) {
+        ImGui::CollapsingHeader(
+            "Invalid Game Manifests")) {
 
-        for (const GameDescriptor& game : invalidGames) {
+        for (const GameDescriptor& game :
+             invalidGames) {
+
             const std::string display =
                 game.displayName.empty()
                     ? game.manifestPath.string()
@@ -360,12 +648,25 @@ void StudioApp::DrawGameLibrary() {
         }
     }
 
-    if (!m_gameRegistry.GetLastError().empty()) {
+    if (!m_gameRegistry
+             .GetLastError()
+             .empty()) {
+
         ImGui::Separator();
 
         ImGui::TextWrapped(
             "Game Registry: %s",
-            m_gameRegistry.GetLastError().c_str());
+            m_gameRegistry
+                .GetLastError()
+                .c_str());
+    }
+
+    if (!m_uiRegistry.GetLastError().empty()) {
+        ImGui::Separator();
+
+        ImGui::TextWrapped(
+            "UI Registry: %s",
+            m_uiRegistry.GetLastError().c_str());
     }
 
     ImGui::End();
@@ -393,7 +694,10 @@ void StudioApp::DrawProjectLibrary() {
 
     ImGui::TextWrapped(
         "Projects directory: %s",
-        m_projectRegistry.GetProjectsDirectory().string().c_str());
+        m_projectRegistry
+            .GetProjectsDirectory()
+            .string()
+            .c_str());
 
     ImGui::Separator();
 
@@ -402,7 +706,9 @@ void StudioApp::DrawProjectLibrary() {
             "No valid 3E projects were discovered.");
     }
 
-    for (const ProjectDescriptor& project : projects) {
+    for (const ProjectDescriptor& project :
+         projects) {
+
         ImGui::PushID(project.id.c_str());
 
         const bool selected =
@@ -423,45 +729,54 @@ void StudioApp::DrawProjectLibrary() {
             project.gameId.c_str());
 
         if (selected) {
-            ImGui::TextUnformatted("ACTIVE PROJECT");
+            ImGui::TextUnformatted(
+                "ACTIVE PROJECT");
 
             ImGui::TextWrapped(
                 "Project root: %s",
-                project.projectRoot.string().c_str());
+                project.projectRoot
+                    .string()
+                    .c_str());
 
             ImGui::TextWrapped(
                 "Manifest: %s",
-                project.manifestPath.string().c_str());
+                project.manifestPath
+                    .string()
+                    .c_str());
 
             ImGui::Separator();
 
             ImGui::TextWrapped(
                 "Game root (READ ONLY): %s",
-                project.gameRoot.string().c_str());
+                project.gameRoot
+                    .string()
+                    .c_str());
 
             ImGui::TextWrapped(
                 "ExportedAssets (READ ONLY): %s",
-                project.exportedAssets.string().c_str());
+                project.exportedAssets
+                    .string()
+                    .c_str());
 
             ImGui::Separator();
 
             ImGui::TextWrapped(
                 "Overlay: %s",
-                project.overlayPath.string().c_str());
+                project.overlayPath
+                    .string()
+                    .c_str());
 
             ImGui::TextWrapped(
                 "Cache: %s",
-                project.cachePath.string().c_str());
+                project.cachePath
+                    .string()
+                    .c_str());
 
             ImGui::TextWrapped(
                 "Temp: %s",
-                project.tempPath.string().c_str());
-
-            if (!project.sourceReadOnly) {
-                ImGui::Separator();
-                ImGui::TextDisabled(
-                    "WARNING: source.readOnly is false.");
-            }
+                project.tempPath
+                    .string()
+                    .c_str());
         }
 
         ImGui::Separator();
@@ -472,9 +787,12 @@ void StudioApp::DrawProjectLibrary() {
         m_projectRegistry.GetInvalidProjects();
 
     if (!invalidProjects.empty() &&
-        ImGui::CollapsingHeader("Invalid Projects")) {
+        ImGui::CollapsingHeader(
+            "Invalid Projects")) {
 
-        for (const ProjectDescriptor& project : invalidProjects) {
+        for (const ProjectDescriptor& project :
+             invalidProjects) {
+
             const std::string display =
                 project.displayName.empty()
                     ? project.manifestPath.string()
@@ -487,12 +805,17 @@ void StudioApp::DrawProjectLibrary() {
         }
     }
 
-    if (!m_projectRegistry.GetLastError().empty()) {
+    if (!m_projectRegistry
+             .GetLastError()
+             .empty()) {
+
         ImGui::Separator();
 
         ImGui::TextWrapped(
             "Project Registry: %s",
-            m_projectRegistry.GetLastError().c_str());
+            m_projectRegistry
+                .GetLastError()
+                .c_str());
     }
 
     ImGui::Separator();
@@ -508,22 +831,34 @@ void StudioApp::DrawProjectLibrary() {
     ImGui::End();
 }
 
-void StudioApp::DrawItem(const data::JsonValue& item) {
+void StudioApp::DrawItem(
+    const data::JsonValue& item) {
+
     if (!item.IsObject()) {
         return;
     }
 
-    const std::string type = item.GetString("type");
+    const std::string type =
+        item.GetString("type");
 
     if (type == "text") {
-        const std::string label = item.GetString("label");
-        ImGui::TextUnformatted(label.c_str());
+        const std::string label =
+            item.GetString("label");
+
+        ImGui::TextUnformatted(
+            label.c_str());
+
         return;
     }
 
     if (type == "bullet") {
-        const std::string label = item.GetString("label");
-        ImGui::BulletText("%s", label.c_str());
+        const std::string label =
+            item.GetString("label");
+
+        ImGui::BulletText(
+            "%s",
+            label.c_str());
+
         return;
     }
 
@@ -544,7 +879,9 @@ void StudioApp::DrawItem(const data::JsonValue& item) {
 
     if (type == "button") {
         const std::string label =
-            item.GetString("label", "Button");
+            item.GetString(
+                "label",
+                "Button");
 
         const std::string command =
             item.GetString("command");
@@ -558,7 +895,9 @@ void StudioApp::DrawItem(const data::JsonValue& item) {
 
     ImGui::TextDisabled(
         "Unsupported UI item type: %s",
-        type.empty() ? "<missing>" : type.c_str());
+        type.empty()
+            ? "<missing>"
+            : type.c_str());
 }
 
 void StudioApp::DrawDataDrivenWindows() {
@@ -574,13 +913,17 @@ void StudioApp::DrawDataDrivenWindows() {
         return;
     }
 
-    for (const data::JsonValue& window : windows->arrayValue) {
+    for (const data::JsonValue& window :
+         windows->arrayValue) {
+
         if (!window.IsObject()) {
             continue;
         }
 
         const std::string title =
-            window.GetString("title", "Untitled");
+            window.GetString(
+                "title",
+                "Untitled");
 
         ImGui::SetNextWindowSize(
             ImVec2(500.0f, 260.0f),
@@ -591,7 +934,9 @@ void StudioApp::DrawDataDrivenWindows() {
                 window.Find("items");
 
             if (items && items->IsArray()) {
-                for (const data::JsonValue& item : items->arrayValue) {
+                for (const data::JsonValue& item :
+                     items->arrayValue) {
+
                     DrawItem(item);
                 }
             }
@@ -602,8 +947,11 @@ void StudioApp::DrawDataDrivenWindows() {
 }
 
 void StudioApp::Draw() {
+    DrawDynamicMenuBar();
+    DrawDynamicToolbar();
     DrawGameLibrary();
     DrawProjectLibrary();
+    DrawCommandPalette();
     DrawDataDrivenWindows();
 }
 

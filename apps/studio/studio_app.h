@@ -1,7 +1,9 @@
 #pragma once
 
+#include "apps/studio/command_registry.h"
 #include "apps/studio/game_registry.h"
 #include "apps/studio/project_registry.h"
+#include "apps/studio/ui_registry.h"
 #include "engine/data/json_value.h"
 
 #include <chrono>
@@ -24,13 +26,15 @@ public:
     }
 
 private:
-    using Command = std::function<void()>;
+    using BuiltinCommand = std::function<void()>;
 
     std::filesystem::path m_runtimeRoot;
     std::filesystem::path m_uiPath;
 
     GameRegistry m_gameRegistry;
     ProjectRegistry m_projectRegistry;
+    CommandRegistry m_commandRegistry;
+    UiRegistry m_uiRegistry;
 
     data::JsonDocument m_uiDocument;
 
@@ -40,7 +44,7 @@ private:
 
     std::chrono::steady_clock::time_point m_nextPoll {};
 
-    std::unordered_map<std::string, Command> m_commands;
+    std::unordered_map<std::string, BuiltinCommand> m_builtinHandlers;
 
     std::string m_lastError;
     std::string m_status = "Studio host initialized.";
@@ -48,14 +52,23 @@ private:
     std::string m_selectedGameId;
     std::string m_selectedProjectId;
 
+    bool m_showCommandPalette = false;
+
     unsigned int m_reloadGeneration = 0;
     unsigned int m_commandCount = 0;
 
     void RegisterBuiltInCommands();
     void ReloadUi(bool force);
-    void ExecuteCommand(const std::string& commandName);
 
+    void SetActiveGame(const std::string& gameId);
     void SelectProject(const ProjectDescriptor& project);
+
+    void ExecuteCommand(const std::string& commandId);
+    void ExecuteResolvedCommand(const CommandDescriptor& command);
+
+    void DrawDynamicMenuBar();
+    void DrawDynamicToolbar();
+    void DrawCommandPalette();
 
     void DrawGameLibrary();
     void DrawProjectLibrary();
