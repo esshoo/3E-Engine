@@ -1,12 +1,12 @@
-﻿{
+{
   "schemaVersion": 1,
 
   "commands": [
     {
       "id": "jackie.play",
       "action": {
-        "type": "game",
-        "handler": "play"
+        "type": "builtin",
+        "handler": "game.play"
       }
     },
     {

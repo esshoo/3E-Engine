@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 
 #include <string_view>
 #include <system_error>
@@ -167,6 +168,19 @@ StudioApp::StudioApp(std::filesystem::path runtimeRoot)
         SelectProject(projects.front());
     }
 }
+StudioApp::~StudioApp() {
+#if defined(_WIN32)
+    if (m_playerProcessHandle) {
+        CloseHandle(
+            static_cast<HANDLE>(
+                m_playerProcessHandle));
+
+        m_playerProcessHandle = nullptr;
+        m_playerProcessId = 0;
+    }
+#endif
+}
+
 
 void StudioApp::RegisterBuiltInCommands() {
     m_builtinHandlers["studio.command_palette"] = [this]() {
@@ -190,11 +204,11 @@ void StudioApp::RegisterBuiltInCommands() {
     };
 
     m_builtinHandlers["game.play"] = [this]() {
-        m_status = "Play command is registered; runtime launch comes in a later foundation stage.";
+        LaunchPlayer();
     };
 
     m_builtinHandlers["game.stop"] = [this]() {
-        m_status = "Stop command is registered.";
+        StopPlayer();
     };
 
     m_builtinHandlers["edit.undo"] = [this]() {
@@ -278,6 +292,7 @@ void StudioApp::SelectProject(
 }
 
 void StudioApp::Update() {
+    PollPlayerProcess();
     m_gameRegistry.Update();
     m_projectRegistry.Update();
     m_commandRegistry.Update();
@@ -378,6 +393,213 @@ ActionContext StudioApp::BuildActionContext() const {
     return context;
 }
 
+void StudioApp::LaunchPlayer() {
+    const ProjectDescriptor* project =
+        FindActiveProject();
+
+    if (!project) {
+        m_status =
+            "Cannot launch 3E Player: no active project.";
+
+        return;
+    }
+
+#if defined(_WIN32)
+    PollPlayerProcess();
+
+    if (m_playerProcessHandle) {
+        m_status =
+            "3E Player is already running.";
+
+        return;
+    }
+
+    const std::filesystem::path playerPath =
+        m_runtimeRoot /
+        "3E-Player.exe";
+
+    std::error_code ec;
+
+    if (!std::filesystem::exists(
+            playerPath,
+            ec)) {
+
+        m_status =
+            "3E-Player.exe not found: " +
+            playerPath.string();
+
+        return;
+    }
+
+    const auto quote =
+        [](const std::wstring& value) {
+            return
+                std::wstring(L"\"") +
+                value +
+                L"\"";
+        };
+
+    std::wstring commandLine =
+        quote(playerPath.wstring()) +
+        L" --game " +
+        quote(
+            std::filesystem::path(
+                project->gameId)
+                .wstring()) +
+        L" --project " +
+        quote(
+            project->manifestPath
+                .wstring());
+
+    std::vector<wchar_t> mutableCommand(
+        commandLine.begin(),
+        commandLine.end());
+
+    mutableCommand.push_back(
+        L'\0');
+
+    STARTUPINFOW startup {};
+    startup.cb =
+        sizeof(startup);
+
+    PROCESS_INFORMATION process {};
+
+    const BOOL created =
+        CreateProcessW(
+            playerPath.wstring().c_str(),
+            mutableCommand.data(),
+            nullptr,
+            nullptr,
+            FALSE,
+            0,
+            nullptr,
+            m_runtimeRoot
+                .wstring()
+                .c_str(),
+            &startup,
+            &process);
+
+    if (!created) {
+        m_status =
+            "Failed to launch 3E Player. Win32 error: " +
+            std::to_string(
+                GetLastError());
+
+        return;
+    }
+
+    CloseHandle(
+        process.hThread);
+
+    m_playerProcessHandle =
+        process.hProcess;
+
+    m_playerProcessId =
+        process.dwProcessId;
+
+    m_status =
+        "3E Player launched for " +
+        project->displayName +
+        ". PID: " +
+        std::to_string(
+            m_playerProcessId);
+#else
+    const std::filesystem::path playerPath =
+        m_runtimeRoot /
+        "3E-Player";
+
+    const std::string command =
+        "\"" +
+        playerPath.string() +
+        "\" --game \"" +
+        project->gameId +
+        "\" --project \"" +
+        project->manifestPath.string() +
+        "\" &";
+
+    if (std::system(
+            command.c_str()) != 0) {
+
+        m_status =
+            "Failed to launch 3E Player.";
+
+        return;
+    }
+
+    m_status =
+        "3E Player launched for " +
+        project->displayName +
+        ".";
+#endif
+}
+
+void StudioApp::StopPlayer() {
+#if defined(_WIN32)
+    PollPlayerProcess();
+
+    if (!m_playerProcessHandle) {
+        m_status =
+            "3E Player is not running.";
+
+        return;
+    }
+
+    HANDLE process =
+        static_cast<HANDLE>(
+            m_playerProcessHandle);
+
+    if (!TerminateProcess(
+            process,
+            0)) {
+
+        m_status =
+            "Failed to stop 3E Player. Win32 error: " +
+            std::to_string(
+                GetLastError());
+
+        return;
+    }
+
+    WaitForSingleObject(
+        process,
+        2000);
+
+    CloseHandle(process);
+
+    m_playerProcessHandle = nullptr;
+    m_playerProcessId = 0;
+
+    m_status =
+        "3E Player stopped.";
+#else
+    m_status =
+        "Stop is not tracked on this platform yet.";
+#endif
+}
+
+void StudioApp::PollPlayerProcess() {
+#if defined(_WIN32)
+    if (!m_playerProcessHandle) {
+        return;
+    }
+
+    HANDLE process =
+        static_cast<HANDLE>(
+            m_playerProcessHandle);
+
+    const DWORD result =
+        WaitForSingleObject(
+            process,
+            0);
+
+    if (result == WAIT_OBJECT_0) {
+        CloseHandle(process);
+
+        m_playerProcessHandle = nullptr;
+        m_playerProcessId = 0;
+    }
+#endif
+}
 void StudioApp::ExecuteResolvedCommand(
     const CommandDescriptor& command) {
 

@@ -7,6 +7,7 @@
   "projectsDirectory": "../3E-Projects",
   "defaultGameTemplate": "games/_template",
   "defaultUiDirectory": "config/ui/default",
+  "playerExecutable": "3E-Player.exe",
 
   "autoDiscoverGames": true,
 

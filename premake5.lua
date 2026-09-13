@@ -150,6 +150,8 @@ project "3E-Studio"
         "engine/data/**.cpp",
         "engine/scripting/**.h",
         "engine/scripting/**.cpp",
+        "engine/runtime/**.h",
+        "engine/runtime/**.cpp",
     }
 
     includedirs {
@@ -223,6 +225,98 @@ project "3E-Studio"
         optimize "on"
 
     -- Studio has no meaningful headless executable yet.
+    filter "configurations:Headless"
+        kind "Utility"
+
+    filter {}
+-- 3E Player
+-- Universal runtime host. Game-specific runtime adapters attach behind this executable.
+project "3E-Player"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++20"
+    staticruntime "on"
+    targetdir "bin"
+    objdir ("%{wks.location}/obj/" .. outputdir .. "/%{prj.name}")
+    debugdir "%{wks.location}/.."
+    multiprocessorcompile "on"
+
+    files {
+        "apps/player/**.h",
+        "apps/player/**.cpp",
+        "engine/data/**.h",
+        "engine/data/**.cpp",
+        "engine/runtime/**.h",
+        "engine/runtime/**.cpp",
+    }
+
+    includedirs {
+        ".",
+        "engine",
+        "vendor/libp3d",
+        "vendor/libp3d/vendor/imgui",
+    }
+
+    links {
+        "libp3d",
+    }
+
+    defines {
+        "_CRT_SECURE_NO_WARNINGS",
+    }
+
+    filter "system:windows"
+        kind "WindowedApp"
+        entrypoint "mainCRTStartup"
+        systemversion "latest"
+        defines { "RC_PLATFORM_WINDOWS" }
+        links {
+            "opengl32",
+            "cfgmgr32",
+            "imm32",
+            "setupapi",
+            "version",
+            "winmm",
+        }
+
+    filter "system:linux"
+        defines { "RC_PLATFORM_LINUX", "PLATFORM_LINUX" }
+        links {
+            "GL", "X11", "Xcursor", "Xi", "Xinerama", "Xrandr",
+            "SDL2", "pthread", "dl", "m",
+        }
+
+    filter "configurations:Debug"
+        runtime "Debug"
+        symbols "on"
+        defines { "DEBUG" }
+
+    filter "configurations:Release"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+
+    filter "configurations:ReleaseASan"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+        symbols "on"
+        targetname "3E-Player-asan"
+
+    filter { "system:windows", "configurations:ReleaseASan" }
+        editandcontinue "off"
+        buildoptions { "/fsanitize=address" }
+        defines { "_DISABLE_STL_ANNOTATION" }
+
+    filter { "system:linux", "configurations:ReleaseASan" }
+        buildoptions { "-fsanitize=address" }
+        linkoptions { "-fsanitize=address" }
+
+    filter "configurations:Shipping"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+
     filter "configurations:Headless"
         kind "Utility"
 

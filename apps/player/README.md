@@ -1,8 +1,28 @@
-﻿# 3E Player
+# 3E Player
 
-Universal runtime host.
+Universal runtime host for 3E-Engine.
 
-3E-Player must not be hardcoded to Jackie Chan.
+3E-Player is intentionally not hardcoded to Jackie Chan.
 
-Games are discovered through games/<game-id>/game.json and loaded
-through their game integration/module.
+Launch forms:
+
+```text
+3E-Player.exe --game <game-id>
+3E-Player.exe --project <path-to-project.3e.json>
+3E-Player.exe --game <game-id> --project <path-to-project.3e.json>
+```
+
+Headless data verification:
+
+```text
+3E-Player.exe --game <game-id> --project <path> --verify-runtime
+```
+
+Games are resolved from:
+
+```text
+games/<game-id>/game.json
+```
+
+The project manifest can supply the game id and external read-only source paths.
+Game-specific native runtime integration is attached behind this universal host.

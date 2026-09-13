@@ -20,6 +20,7 @@ namespace threee::studio {
 class StudioApp {
 public:
     explicit StudioApp(std::filesystem::path runtimeRoot);
+    ~StudioApp();
 
     void Update();
     void Draw();
@@ -64,6 +65,9 @@ private:
 
     bool m_showCommandPalette = false;
 
+    void* m_playerProcessHandle = nullptr;
+    unsigned long m_playerProcessId = 0;
+
     unsigned int m_reloadGeneration = 0;
     unsigned int m_commandCount = 0;
     unsigned int m_lastUiGeneration = 0;
@@ -76,6 +80,10 @@ private:
 
     const ProjectDescriptor* FindActiveProject() const;
     ActionContext BuildActionContext() const;
+
+    void LaunchPlayer();
+    void StopPlayer();
+    void PollPlayerProcess();
 
     void ExecuteCommand(const std::string& commandId);
     void ExecuteResolvedCommand(const CommandDescriptor& command);
