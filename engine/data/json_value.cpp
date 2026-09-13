@@ -419,6 +419,14 @@ private:
 } // namespace
 
 JsonDocument JsonDocument::Parse(std::string_view source) {
+    // Accept UTF-8 BOM.
+    while (source.size() >= 3 &&
+           static_cast<unsigned char>(source[0]) == 0xEF &&
+           static_cast<unsigned char>(source[1]) == 0xBB &&
+           static_cast<unsigned char>(source[2]) == 0xBF) {
+        source.remove_prefix(3);
+    }
+
     Parser parser(source);
     return parser.Run();
 }

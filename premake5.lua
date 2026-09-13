@@ -165,6 +165,8 @@ project "3E-Studio"
     }
 
     filter "system:windows"
+        kind "WindowedApp"
+        entrypoint "mainCRTStartup"
         systemversion "latest"
         defines { "RC_PLATFORM_WINDOWS" }
         links {

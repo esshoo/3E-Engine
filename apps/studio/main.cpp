@@ -1,10 +1,11 @@
+#include "apps/studio/game_registry.h"
 #include "apps/studio/studio_app.h"
 
 #include "p3d/context.h"
 #include "pddi/pddi.h"
 #include "pddi/pddidev.h"
 
-#include <iostream>
+#include <cstring>
 
 namespace {
 
@@ -16,17 +17,30 @@ void DrawStudioOverlay() {
     }
 }
 
+int VerifyRuntimeData(const std::filesystem::path& runtimeRoot) {
+    threee::studio::GameRegistry registry(runtimeRoot);
+    registry.Update(true);
+
+    if (!registry.GetLastError().empty()) {
+        return 2;
+    }
+
+    if (registry.GetGames().empty()) {
+        return 3;
+    }
+
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
-    (void)argc;
+    const std::filesystem::path runtimeRoot =
+        threee::studio::FindRuntimeRoot(argv && argv[0] ? argv[0] : nullptr);
 
-    const std::filesystem::path projectRoot =
-        threee::studio::FindProjectRoot(argv && argv[0] ? argv[0] : nullptr);
-
-    std::cout << "[3E-Studio] Project root: "
-              << projectRoot.string()
-              << std::endl;
+    if (argc >= 2 && argv[1] && std::strcmp(argv[1], "--verify-data") == 0) {
+        return VerifyRuntimeData(runtimeRoot);
+    }
 
     tPlatform* platform = tPlatform::Create();
 
@@ -41,20 +55,17 @@ int main(int argc, char** argv) {
     tContext* context = platform->CreateContext(init);
 
     if (!context) {
-        std::cerr << "[3E-Studio] CreateContext failed." << std::endl;
         tPlatform::Destroy();
         return 1;
     }
 
-    threee::studio::StudioApp studio(projectRoot);
+    threee::studio::StudioApp studio(runtimeRoot);
     g_studioApp = &studio;
 
     p3d::display->AddOverlayCallback(DrawStudioOverlay);
     p3d::context->SetClearColour(pddiColour(22, 23, 27));
 
     while (!p3d::display->ShouldClose()) {
-        // Same lifecycle order used by the existing ReChan runtime:
-        // events -> frame -> overlay -> present.
         p3d::display->PollEvents();
 
         studio.Update();

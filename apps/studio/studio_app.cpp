@@ -6,18 +6,40 @@
 #include <utility>
 #include <vector>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 namespace threee::studio {
 
 namespace {
 
-bool LooksLikeProjectRoot(const std::filesystem::path& path) {
+bool LooksLikeRuntimeRoot(const std::filesystem::path& path) {
     std::error_code ec;
 
-    return std::filesystem::exists(path / "premake5.lua", ec) &&
-           std::filesystem::exists(path / "vendor" / "libp3d", ec);
+    const bool hasStudioConfig =
+        std::filesystem::exists(path / "config" / "studio.json", ec);
+
+    ec.clear();
+
+    const bool hasDefaultUi =
+        std::filesystem::exists(
+            path / "config" / "ui" / "default" / "studio.json",
+            ec);
+
+    return hasStudioConfig || hasDefaultUi;
 }
 
-std::filesystem::path SearchUpward(std::filesystem::path path) {
+bool LooksLikeSourceRoot(const std::filesystem::path& path) {
+    std::error_code ec;
+
+    return
+        std::filesystem::exists(path / "premake5.lua", ec) &&
+        std::filesystem::exists(path / "vendor" / "libp3d", ec);
+}
+
+std::filesystem::path SearchUpwardForSourceRoot(std::filesystem::path path) {
     std::error_code ec;
     path = std::filesystem::weakly_canonical(path, ec);
 
@@ -27,11 +49,12 @@ std::filesystem::path SearchUpward(std::filesystem::path path) {
     }
 
     for (int depth = 0; depth < 10 && !path.empty(); ++depth) {
-        if (LooksLikeProjectRoot(path)) {
+        if (LooksLikeRuntimeRoot(path) || LooksLikeSourceRoot(path)) {
             return path;
         }
 
         const std::filesystem::path parent = path.parent_path();
+
         if (parent == path) {
             break;
         }
@@ -42,35 +65,82 @@ std::filesystem::path SearchUpward(std::filesystem::path path) {
     return {};
 }
 
-} // namespace
+std::filesystem::path GetExecutableDirectory(const char* executablePath) {
+#if defined(_WIN32)
+    std::vector<wchar_t> buffer(32768, L'\0');
 
-std::filesystem::path FindProjectRoot(const char* executablePath) {
+    const DWORD length =
+        GetModuleFileNameW(
+            nullptr,
+            buffer.data(),
+            static_cast<DWORD>(buffer.size()));
+
+    if (length > 0 && length < static_cast<DWORD>(buffer.size())) {
+        return
+            std::filesystem::path(std::wstring(buffer.data(), length))
+                .parent_path();
+    }
+#endif
+
     std::error_code ec;
 
-    if (const auto fromCurrent = SearchUpward(std::filesystem::current_path(ec));
-        !fromCurrent.empty()) {
-        return fromCurrent;
-    }
-
     if (executablePath && executablePath[0]) {
-        std::filesystem::path executable = executablePath;
+        std::filesystem::path executable(executablePath);
 
         if (executable.is_relative()) {
             executable = std::filesystem::absolute(executable, ec);
         }
 
-        if (const auto fromExecutable = SearchUpward(executable.parent_path());
-            !fromExecutable.empty()) {
-            return fromExecutable;
+        if (!ec) {
+            return executable.parent_path();
         }
     }
 
-    return std::filesystem::current_path(ec);
+    return {};
 }
 
-StudioApp::StudioApp(std::filesystem::path projectRoot)
-    : m_projectRoot(std::move(projectRoot)),
-      m_uiPath(m_projectRoot / "config" / "ui" / "default" / "studio.json") {
+} // namespace
+
+std::filesystem::path FindRuntimeRoot(const char* executablePath) {
+    std::error_code ec;
+
+    const std::filesystem::path executableDirectory =
+        GetExecutableDirectory(executablePath);
+
+    if (!executableDirectory.empty() && LooksLikeRuntimeRoot(executableDirectory)) {
+        return executableDirectory;
+    }
+
+    const std::filesystem::path currentDirectory =
+        std::filesystem::current_path(ec);
+
+    if (!ec && LooksLikeRuntimeRoot(currentDirectory)) {
+        return currentDirectory;
+    }
+
+    if (!currentDirectory.empty()) {
+        if (const auto sourceRoot = SearchUpwardForSourceRoot(currentDirectory);
+            !sourceRoot.empty()) {
+            return sourceRoot;
+        }
+    }
+
+    if (!executableDirectory.empty()) {
+        if (const auto sourceRoot = SearchUpwardForSourceRoot(executableDirectory);
+            !sourceRoot.empty()) {
+            return sourceRoot;
+        }
+
+        return executableDirectory;
+    }
+
+    return currentDirectory;
+}
+
+StudioApp::StudioApp(std::filesystem::path runtimeRoot)
+    : m_runtimeRoot(std::move(runtimeRoot)),
+      m_uiPath(m_runtimeRoot / "config" / "ui" / "default" / "studio.json"),
+      m_gameRegistry(m_runtimeRoot) {
 
     RegisterBuiltInCommands();
     ReloadUi(true);
@@ -86,11 +156,14 @@ void StudioApp::RegisterBuiltInCommands() {
 
     m_commands["studio.reload"] = [this]() {
         ReloadUi(true);
-        m_status = "Manual UI reload requested.";
+        m_gameRegistry.Update(true);
+        m_status = "Studio data reloaded.";
     };
 }
 
 void StudioApp::Update() {
+    m_gameRegistry.Update();
+
     const auto now = std::chrono::steady_clock::now();
 
     if (now < m_nextPoll) {
@@ -111,6 +184,7 @@ void StudioApp::ReloadUi(bool force) {
     }
 
     const auto writeTime = std::filesystem::last_write_time(m_uiPath, ec);
+
     if (ec) {
         m_lastError = "Cannot read UI timestamp: " + ec.message();
         return;
@@ -151,32 +225,89 @@ void StudioApp::ExecuteCommand(const std::string& commandName) {
     it->second();
 }
 
-void StudioApp::DrawHostPanel() {
-    ImGui::SetNextWindowSize(ImVec2(470.0f, 215.0f), ImGuiCond_FirstUseEver);
+void StudioApp::DrawGameLibrary() {
+    ImGui::SetNextWindowSize(ImVec2(720.0f, 520.0f), ImGuiCond_FirstUseEver);
 
-    if (!ImGui::Begin("3E Studio Host")) {
+    if (!ImGui::Begin("3E Studio - Games")) {
         ImGui::End();
         return;
     }
 
-    ImGui::TextUnformatted("Standalone 3E-Studio executable");
+    const auto& games = m_gameRegistry.GetGames();
+
+    ImGui::TextUnformatted("Game Library");
     ImGui::Separator();
 
-    ImGui::Text("Reload generation: %u", m_reloadGeneration);
-    ImGui::Text("Commands executed: %u", m_commandCount);
+    ImGui::Text("Discovered games: %d", static_cast<int>(games.size()));
+    ImGui::TextWrapped("Runtime root: %s", m_runtimeRoot.string().c_str());
+    ImGui::TextWrapped(
+        "Games directory: %s",
+        m_gameRegistry.GetGamesDirectory().string().c_str());
 
-    ImGui::TextUnformatted("Project root:");
-    ImGui::TextWrapped("%s", m_projectRoot.string().c_str());
+    ImGui::Separator();
 
-    ImGui::TextUnformatted("UI source:");
-    ImGui::TextWrapped("%s", m_uiPath.string().c_str());
+    if (games.empty()) {
+        ImGui::TextDisabled("No enabled games were discovered.");
+    }
+
+    for (const GameDescriptor& game : games) {
+        ImGui::PushID(game.id.c_str());
+
+        const bool selected = m_selectedGameId == game.id;
+
+        if (ImGui::Selectable(game.displayName.c_str(), selected)) {
+            m_selectedGameId = game.id;
+            m_status = "Selected game: " + game.displayName;
+        }
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("[%s]", game.id.c_str());
+
+        if (selected) {
+            const char* integration =
+                game.integrationState.empty()
+                    ? "unspecified"
+                    : game.integrationState.c_str();
+
+            ImGui::Text("Integration: %s", integration);
+            ImGui::TextWrapped("Game root: %s", game.rootPath.string().c_str());
+            ImGui::TextWrapped("Manifest: %s", game.manifestPath.string().c_str());
+        }
+
+        ImGui::Separator();
+        ImGui::PopID();
+    }
+
+    const auto& invalidGames = m_gameRegistry.GetInvalidGames();
+
+    if (!invalidGames.empty() && ImGui::CollapsingHeader("Invalid Game Manifests")) {
+        for (const GameDescriptor& game : invalidGames) {
+            const std::string display = game.displayName.empty()
+                ? game.manifestPath.string()
+                : game.displayName;
+
+            ImGui::BulletText("%s: %s", display.c_str(), game.error.c_str());
+        }
+    }
+
+    if (!m_gameRegistry.GetLastError().empty()) {
+        ImGui::Separator();
+        ImGui::TextWrapped("Game Registry: %s", m_gameRegistry.GetLastError().c_str());
+    }
 
     if (!m_lastError.empty()) {
         ImGui::Separator();
-        ImGui::TextWrapped("JSON error: %s", m_lastError.c_str());
+        ImGui::TextWrapped("UI JSON: %s", m_lastError.c_str());
     }
 
     ImGui::Separator();
+
+    if (ImGui::Button("Refresh Games")) {
+        m_gameRegistry.Update(true);
+        m_status = "Game Registry refreshed.";
+    }
+
+    ImGui::SameLine();
     ImGui::TextWrapped("%s", m_status.c_str());
 
     ImGui::End();
@@ -223,6 +354,7 @@ void StudioApp::DrawItem(const data::JsonValue& item) {
         if (ImGui::Button(label.c_str())) {
             ExecuteCommand(command);
         }
+
         return;
     }
 
@@ -266,7 +398,7 @@ void StudioApp::DrawDataDrivenWindows() {
 }
 
 void StudioApp::Draw() {
-    DrawHostPanel();
+    DrawGameLibrary();
     DrawDataDrivenWindows();
 }
 
