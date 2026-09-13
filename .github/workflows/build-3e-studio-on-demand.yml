@@ -1,0 +1,201 @@
+name: Build 3E Studio (On Demand)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch / tag / commit to build
+        required: true
+        default: feature/studio-host
+        type: string
+      configuration:
+        description: Build configuration
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+
+permissions:
+  contents: read
+
+jobs:
+  build-studio:
+    name: 3E-Studio ${{ inputs.configuration }} x64
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Show runner/toolchain info
+        shell: pwsh
+        run: |
+          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+          Write-Host "Workspace: $env:GITHUB_WORKSPACE"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) {
+            throw "vswhere.exe not found on runner."
+          }
+          & $vswhere -latest -products * -property displayName
+          & $vswhere -latest -products * -property catalog_productDisplayVersion
+
+      - name: Download Premake 5.0.0-beta8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $url = "https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-windows.zip"
+          $expected = "e64ce2ed8778e0098f63674cca61fe33941b5f0c8d9a4afd651152bdea3758ab"
+
+          New-Item -ItemType Directory -Force -Path ".tools\premake" | Out-Null
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile ".tools\premake.zip"
+
+          $actual = (Get-FileHash ".tools\premake.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          if ($actual -ne $expected) {
+            throw "Premake SHA256 mismatch. Expected $expected, got $actual"
+          }
+
+          Expand-Archive `
+            -Path ".tools\premake.zip" `
+            -DestinationPath ".tools\premake" `
+            -Force
+
+          $premake = Get-ChildItem ".tools\premake" -Recurse -Filter "premake5.exe" |
+            Select-Object -First 1
+
+          if (-not $premake) {
+            throw "premake5.exe not found after extraction."
+          }
+
+          Copy-Item $premake.FullName ".tools\premake5.exe" -Force
+
+          & ".\.tools\premake5.exe" --version
+
+      - name: Generate Visual Studio 2026 project
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          & ".\.tools\premake5.exe" vs2026
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Premake generation failed with exit code $LASTEXITCODE."
+          }
+
+          if (-not (Test-Path ".\build\3E-Studio.vcxproj")) {
+            throw "build\3E-Studio.vcxproj was not generated."
+          }
+
+      - name: Locate MSBuild
+        id: msbuild
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $matches = @(
+            & $vswhere `
+              -latest `
+              -products * `
+              -requires Microsoft.Component.MSBuild `
+              -find "MSBuild\**\MSBuild.exe"
+          ) | Where-Object {
+            $_ -and
+            (Test-Path $_) -and
+            ($_ -notmatch '\\Roslyn\\') -and
+            ($_ -notmatch '\\FileTracker\\')
+          }
+
+          if ($matches.Count -eq 0) {
+            throw "MSBuild.exe not found."
+          }
+
+          $msbuild = $matches |
+            Sort-Object {
+              if ($_ -match '\\amd64\\') { 0 } else { 1 }
+            }, Length |
+            Select-Object -First 1
+
+          Write-Host "MSBuild: $msbuild"
+          "path=$msbuild" >> $env:GITHUB_OUTPUT
+
+      - name: Build 3E-Studio only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          & "${{ steps.msbuild.outputs.path }}" `
+            ".\build\3E-Studio.vcxproj" `
+            /m `
+            /nologo `
+            /p:Configuration="${{ inputs.configuration }}" `
+            /p:Platform=x64
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "3E-Studio build failed with exit code $LASTEXITCODE."
+          }
+
+          if (-not (Test-Path ".\bin\3E-Studio.exe")) {
+            throw "Build completed but bin\3E-Studio.exe was not found."
+          }
+
+      - name: Verify data-driven files
+        shell: pwsh
+        run: |
+          $required = @(
+            ".\bin\3E-Studio.exe",
+            ".\config\ui\default\studio.json"
+          )
+
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) {
+              throw "Missing required artifact file: $path"
+            }
+          }
+
+      - name: Prepare portable artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          New-Item -ItemType Directory -Force -Path ".artifact\3E-Studio" | Out-Null
+
+          Copy-Item ".\bin\3E-Studio.exe" ".artifact\3E-Studio\3E-Studio.exe"
+
+          foreach ($dir in @("config", "games", "schemas", "scripts", "pipelines")) {
+            if (Test-Path ".\$dir") {
+              Copy-Item ".\$dir" ".artifact\3E-Studio\$dir" -Recurse
+            }
+          }
+
+          @"
+          3E-Studio build produced by GitHub Actions.
+
+          Source ref:
+            ${{ inputs.ref }}
+
+          Host build:
+            ${{ inputs.configuration }} x64
+
+          Daily workflow:
+            Edit JSON / schemas / scripts -> no host rebuild.
+
+          Re-run this workflow only when native C++ host/module changes require compilation.
+          "@ | Set-Content ".artifact\3E-Studio\BUILD-INFO.txt" -Encoding UTF8
+
+      - name: Upload 3E-Studio artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3E-Studio-${{ inputs.configuration }}-x64
+          path: .artifact/3E-Studio
+          if-no-files-found: error
+          retention-days: 30

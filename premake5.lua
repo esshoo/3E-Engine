@@ -128,3 +128,94 @@ project "rechan"
         }
 
     filter {}
+
+-- 3E Studio
+-- Standalone editor/viewer host.
+-- Intentionally depends only on generic engine code + libp3d.
+project "3E-Studio"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++20"
+    staticruntime "on"
+    targetdir "bin"
+    objdir ("%{wks.location}/obj/" .. outputdir .. "/%{prj.name}")
+    debugdir "%{wks.location}/.."
+    multiprocessorcompile "on"
+
+    files {
+        "apps/studio/**.h",
+        "apps/studio/**.cpp",
+        "engine/data/**.h",
+        "engine/data/**.cpp",
+    }
+
+    includedirs {
+        ".",
+        "engine",
+        "vendor/libp3d",
+        "vendor/libp3d/vendor/imgui",
+    }
+
+    links {
+        "libp3d",
+    }
+
+    defines {
+        "_CRT_SECURE_NO_WARNINGS",
+    }
+
+    filter "system:windows"
+        systemversion "latest"
+        defines { "RC_PLATFORM_WINDOWS" }
+        links {
+            "opengl32",
+            "cfgmgr32",
+            "imm32",
+            "setupapi",
+            "version",
+            "winmm",
+        }
+
+    filter "system:linux"
+        defines { "RC_PLATFORM_LINUX", "PLATFORM_LINUX" }
+        links {
+            "GL", "X11", "Xcursor", "Xi", "Xinerama", "Xrandr",
+            "SDL2", "pthread", "dl", "m",
+        }
+
+    filter "configurations:Debug"
+        runtime "Debug"
+        symbols "on"
+        defines { "DEBUG" }
+
+    filter "configurations:Release"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+
+    filter "configurations:ReleaseASan"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+        symbols "on"
+        targetname "3E-Studio-asan"
+
+    filter { "system:windows", "configurations:ReleaseASan" }
+        editandcontinue "off"
+        buildoptions { "/fsanitize=address" }
+        defines { "_DISABLE_STL_ANNOTATION" }
+
+    filter { "system:linux", "configurations:ReleaseASan" }
+        buildoptions { "-fsanitize=address" }
+        linkoptions { "-fsanitize=address" }
+
+    filter "configurations:Shipping"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+
+    -- Studio has no meaningful headless executable yet.
+    filter "configurations:Headless"
+        kind "Utility"
+
+    filter {}

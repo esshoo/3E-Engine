@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "windows": [
+    {
+      "title": "3E Studio - Data Driven UI",
+      "items": [
+        {
+          "type": "text",
+          "label": "This window is rendered from config/ui/default/studio.json."
+        },
+        {
+          "type": "bullet",
+          "label": "Edit labels while 3E-Studio is running."
+        },
+        {
+          "type": "bullet",
+          "label": "Save the JSON file. No C++ rebuild should be required."
+        },
+        {
+          "type": "separator"
+        },
+        {
+          "type": "button",
+          "label": "LIVE RELOAD READY",
+          "command": "test.live_reload"
+        },
+        {
+          "type": "same_line"
+        },
+        {
+          "type": "button",
+          "label": "Reload Now",
+          "command": "studio.reload"
+        }
+      ]
+    }
+  ]
+}
