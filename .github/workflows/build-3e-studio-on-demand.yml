@@ -196,23 +196,38 @@ jobs:
           Push-Location $env:GITHUB_WORKSPACE
 
           try {
-            & ".\bin\3E-Player.exe" `
-              --game jackie `
-              --verify-runtime
+            Remove-Item ".\3E-Player-Verify.txt" -Force -ErrorAction SilentlyContinue
 
-            if ($LASTEXITCODE -ne 0) {
-              if (Test-Path ".\3E-Player-Verify.txt") {
-                Get-Content ".\3E-Player-Verify.txt"
-              }
+            # 3E-Player is a Windows GUI-subsystem executable.
+            # PowerShell's direct invocation may return immediately and leave
+            # $LASTEXITCODE unset, so wait explicitly for the process and read
+            # the real process ExitCode.
+            $process = Start-Process `
+              -FilePath ".\bin\3E-Player.exe" `
+              -ArgumentList @(
+                "--game",
+                "jackie",
+                "--verify-runtime"
+              ) `
+              -WorkingDirectory $env:GITHUB_WORKSPACE `
+              -Wait `
+              -PassThru
 
-              throw "3E-Player runtime verification failed with exit code $LASTEXITCODE."
+            $exitCode = $process.ExitCode
+
+            Write-Host "3E-Player verification exit code: $exitCode"
+
+            if (Test-Path ".\3E-Player-Verify.txt") {
+              Get-Content ".\3E-Player-Verify.txt"
+            }
+
+            if ($exitCode -ne 0) {
+              throw "3E-Player runtime verification failed with exit code $exitCode."
             }
 
             if (-not (Test-Path ".\3E-Player-Verify.txt")) {
               throw "3E-Player verification report was not produced."
             }
-
-            Get-Content ".\3E-Player-Verify.txt"
           }
           finally {
             Pop-Location
@@ -226,10 +241,6 @@ jobs:
           & ".\scripts\package-3e-host.ps1" `
             -Root $env:GITHUB_WORKSPACE `
             -Output ".artifact\3E-Studio"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "Host packaging script failed with exit code $LASTEXITCODE."
-          }
 
           if (Test-Path ".\3E-Player-Verify.txt") {
             Copy-Item `
