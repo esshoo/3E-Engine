@@ -1,12 +1,14 @@
 #pragma once
 
 #include "apps/studio/action_executor.h"
+#include "apps/studio/asset_registry.h"
 #include "apps/studio/command_registry.h"
 #include "apps/studio/game_registry.h"
 #include "apps/studio/project_registry.h"
 #include "apps/studio/ui_registry.h"
 #include "engine/data/json_value.h"
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -37,6 +39,7 @@ private:
     CommandRegistry m_commandRegistry;
     UiRegistry m_uiRegistry;
     ActionExecutor m_actionExecutor;
+    AssetRegistry m_assetRegistry;
 
     data::JsonDocument m_uiDocument;
 
@@ -53,6 +56,10 @@ private:
 
     std::string m_selectedGameId;
     std::string m_selectedProjectId;
+
+    std::string m_assetCategory = "all";
+    std::string m_selectedAssetPath;
+    std::array<char, 256> m_assetSearch {};
 
     bool m_showCommandPalette = false;
 
@@ -77,6 +84,7 @@ private:
 
     void DrawGameLibrary();
     void DrawProjectLibrary();
+    void DrawAssetBrowser();
     void DrawDataDrivenWindows();
     void DrawItem(const data::JsonValue& item);
 };

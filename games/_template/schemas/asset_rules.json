@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "categories": [
+    {
+      "id": "models",
+      "label": "Models",
+      "extensions": [".glb", ".gltf", ".obj", ".fbx"]
+    },
+    {
+      "id": "textures",
+      "label": "Textures",
+      "extensions": [".png", ".bmp", ".tga", ".dds", ".jpg", ".jpeg", ".tim"]
+    },
+    {
+      "id": "audio",
+      "label": "Audio",
+      "extensions": [".wav", ".ogg", ".mp3", ".vag", ".xa"]
+    },
+    {
+      "id": "data",
+      "label": "Data",
+      "extensions": [".json", ".txt", ".bin", ".dat", ".csv"]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    {
+      "id": "asset.refresh",
+      "action": {
+        "type": "builtin",
+        "handler": "asset.refresh"
+      }
+    }
+  ]
+}

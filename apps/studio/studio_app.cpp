@@ -2,6 +2,9 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+#include <cctype>
+
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -149,7 +152,8 @@ StudioApp::StudioApp(std::filesystem::path runtimeRoot)
       m_projectRegistry(m_runtimeRoot),
       m_commandRegistry(m_runtimeRoot),
       m_uiRegistry(m_runtimeRoot),
-      m_actionExecutor(m_runtimeRoot) {
+      m_actionExecutor(m_runtimeRoot),
+      m_assetRegistry(m_runtimeRoot) {
 
     RegisterBuiltInCommands();
     ReloadUi(true);
@@ -174,6 +178,7 @@ void StudioApp::RegisterBuiltInCommands() {
         m_projectRegistry.Update(true);
         m_commandRegistry.Update(true);
         m_uiRegistry.Update(true);
+        m_assetRegistry.Update(true);
 
         m_status = "All Studio definitions reloaded.";
     };
@@ -216,6 +221,7 @@ void StudioApp::RegisterBuiltInCommands() {
         m_projectRegistry.Update(true);
         m_commandRegistry.Update(true);
         m_uiRegistry.Update(true);
+        m_assetRegistry.Update(true);
 
         m_status = "Studio data reloaded.";
     };
@@ -223,6 +229,16 @@ void StudioApp::RegisterBuiltInCommands() {
     m_builtinHandlers["project.refresh"] = [this]() {
         m_projectRegistry.Update(true);
         m_status = "Project Registry refreshed.";
+    };
+    m_builtinHandlers["asset.refresh"] = [this]() {
+        m_assetRegistry.Refresh(true);
+
+        m_status =
+            "Asset index refreshed. Files: " +
+            std::to_string(
+                m_assetRegistry
+                    .GetAssets()
+                    .size());
     };
 }
 
@@ -245,6 +261,14 @@ void StudioApp::SelectProject(
     m_selectedProjectId = project.id;
     SetActiveGame(project.gameId);
 
+    m_assetRegistry.SetProject(
+        &project,
+        project.gameId);
+
+    m_selectedAssetPath.clear();
+    m_assetCategory = "all";
+    m_assetSearch.fill('\0');
+
     m_status =
         "Active project: " +
         project.displayName;
@@ -255,6 +279,7 @@ void StudioApp::Update() {
     m_projectRegistry.Update();
     m_commandRegistry.Update();
     m_uiRegistry.Update();
+    m_assetRegistry.Update();
 
     const auto now =
         std::chrono::steady_clock::now();
@@ -934,6 +959,287 @@ void StudioApp::DrawItem(
             : type.c_str());
 }
 
+void StudioApp::DrawAssetBrowser() {
+    ImGui::SetNextWindowSize(
+        ImVec2(900.0f, 620.0f),
+        ImGuiCond_FirstUseEver);
+
+    if (!ImGui::Begin("3E Studio - Asset Browser")) {
+        ImGui::End();
+        return;
+    }
+
+    const ProjectDescriptor* project =
+        FindActiveProject();
+
+    if (!project) {
+        ImGui::TextDisabled(
+            "Select a project to browse assets.");
+
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextWrapped(
+        "ExportedAssets: %s",
+        project->exportedAssets
+            .string()
+            .c_str());
+
+    ImGui::Text(
+        "Indexed files: %d",
+        static_cast<int>(
+            m_assetRegistry
+                .GetAssets()
+                .size()));
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Refresh Asset Index")) {
+        m_assetRegistry.Refresh(true);
+
+        m_status =
+            "Asset index refreshed. Files: " +
+            std::to_string(
+                m_assetRegistry
+                    .GetAssets()
+                    .size());
+    }
+
+    ImGui::Separator();
+
+    ImGui::SetNextItemWidth(300.0f);
+
+    ImGui::InputText(
+        "Search",
+        m_assetSearch.data(),
+        m_assetSearch.size());
+
+    ImGui::SameLine();
+
+    const char* categoryPreview =
+        m_assetCategory == "all"
+            ? "All"
+            : m_assetCategory.c_str();
+
+    ImGui::SetNextItemWidth(200.0f);
+
+    if (ImGui::BeginCombo(
+            "Category",
+            categoryPreview)) {
+
+        const bool allSelected =
+            m_assetCategory == "all";
+
+        if (ImGui::Selectable(
+                "All",
+                allSelected)) {
+
+            m_assetCategory = "all";
+        }
+
+        for (const AssetCategoryRule& rule :
+             m_assetRegistry.GetRules()) {
+
+            const bool selected =
+                m_assetCategory == rule.id;
+
+            if (ImGui::Selectable(
+                    rule.label.c_str(),
+                    selected)) {
+
+                m_assetCategory = rule.id;
+            }
+        }
+
+        const bool otherSelected =
+            m_assetCategory == "other";
+
+        if (ImGui::Selectable(
+                "Other",
+                otherSelected)) {
+
+            m_assetCategory = "other";
+        }
+
+        ImGui::EndCombo();
+    }
+
+    ImGui::Separator();
+
+    std::string search =
+        m_assetSearch.data();
+
+    std::transform(
+        search.begin(),
+        search.end(),
+        search.begin(),
+        [](unsigned char c) {
+            return static_cast<char>(
+                std::tolower(c));
+        });
+
+    std::vector<std::size_t> filtered;
+
+    const auto& assets =
+        m_assetRegistry.GetAssets();
+
+    filtered.reserve(assets.size());
+
+    for (std::size_t i = 0;
+         i < assets.size();
+         ++i) {
+
+        const AssetRecord& asset =
+            assets[i];
+
+        if (m_assetCategory != "all") {
+            const bool categoryMatch =
+                std::find(
+                    asset.categories.begin(),
+                    asset.categories.end(),
+                    m_assetCategory)
+                != asset.categories.end();
+
+            if (!categoryMatch) {
+                continue;
+            }
+        }
+
+        if (!search.empty()) {
+            std::string path =
+                asset.relativePath
+                    .generic_string();
+
+            std::transform(
+                path.begin(),
+                path.end(),
+                path.begin(),
+                [](unsigned char c) {
+                    return static_cast<char>(
+                        std::tolower(c));
+                });
+
+            if (path.find(search)
+                == std::string::npos) {
+                continue;
+            }
+        }
+
+        filtered.push_back(i);
+    }
+
+    ImGui::Text(
+        "Visible: %d",
+        static_cast<int>(filtered.size()));
+
+    ImGui::BeginChild(
+        "AssetList",
+        ImVec2(0.0f, 360.0f),
+        true);
+
+    ImGuiListClipper clipper;
+
+    clipper.Begin(
+        static_cast<int>(
+            filtered.size()));
+
+    while (clipper.Step()) {
+        for (int visibleIndex =
+                 clipper.DisplayStart;
+             visibleIndex <
+                 clipper.DisplayEnd;
+             ++visibleIndex) {
+
+            const AssetRecord& asset =
+                assets[
+                    filtered[
+                        static_cast<std::size_t>(
+                            visibleIndex)]];
+
+            const std::string absolute =
+                asset.absolutePath.string();
+
+            const bool selected =
+                m_selectedAssetPath ==
+                absolute;
+
+            std::string label =
+                "[" +
+                asset.source +
+                "] " +
+                asset.relativePath
+                    .generic_string();
+
+            if (ImGui::Selectable(
+                    label.c_str(),
+                    selected)) {
+
+                m_selectedAssetPath =
+                    absolute;
+            }
+        }
+    }
+
+    ImGui::EndChild();
+
+    if (!m_selectedAssetPath.empty()) {
+        const auto selected =
+            std::find_if(
+                assets.begin(),
+                assets.end(),
+                [this](const AssetRecord& asset) {
+                    return
+                        asset.absolutePath.string()
+                        ==
+                        m_selectedAssetPath;
+                });
+
+        if (selected != assets.end()) {
+            ImGui::Separator();
+
+            ImGui::TextWrapped(
+                "Selected: %s",
+                selected->absolutePath
+                    .string()
+                    .c_str());
+
+            ImGui::Text(
+                "Size: %llu bytes",
+                static_cast<unsigned long long>(
+                    selected->size));
+
+            ImGui::Text(
+                "Extension: %s",
+                selected->extension.c_str());
+
+            if (ImGui::Button("Copy Path")) {
+                ImGui::SetClipboardText(
+                    selected->absolutePath
+                        .string()
+                        .c_str());
+
+                m_status =
+                    "Asset path copied.";
+            }
+        }
+    }
+
+    if (!m_assetRegistry
+             .GetLastError()
+             .empty()) {
+
+        ImGui::Separator();
+
+        ImGui::TextWrapped(
+            "Asset Registry: %s",
+            m_assetRegistry
+                .GetLastError()
+                .c_str());
+    }
+
+    ImGui::End();
+}
 void StudioApp::DrawDataDrivenWindows() {
     if (!m_hasValidUi ||
         !m_uiDocument.root.IsObject()) {
@@ -985,6 +1291,7 @@ void StudioApp::Draw() {
     DrawDynamicToolbar();
     DrawGameLibrary();
     DrawProjectLibrary();
+    DrawAssetBrowser();
     DrawCommandPalette();
     DrawDataDrivenWindows();
 }
